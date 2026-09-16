@@ -1,0 +1,3473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AESO Strip — PowerMarks Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#111823; --panel2:#0e141c; --grid:#1c2634;
+    --ink:#e6edf5; --muted:#9aa8bb; --line:#7ecbff; --ma1:#f5c518; --ma2:#ff7ab6;
+    --p15:#31c48d; --p85:#ef4444; --median:#c9a2ff; --accent:#7ecbff;
+    --buy:#0f3a2b; --sell:#3a1414; --mid:#1a222e;
+    --grade-a:#31c48d; --grade-b:#7ec996; --grade-c:#c9a466; --grade-d:#e28a4a; --grade-f:#ef4444;
+  }
+  *{box-sizing:border-box}
+  html,body{background:var(--bg);color:var(--ink);font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0}
+  html,body{width:100%;height:100%;overflow:hidden}
+  /* App wrapper takes the visible viewport; content inside is 1360px wide and scrolls both directions here */
+  #app{width:100%;height:100%;overflow:auto;scrollbar-color:#5a7099 #0b1220;scrollbar-width:auto}
+  #app > *{min-width:1360px}
+  /* Force a visible horizontal scrollbar even on Safari/macOS overlay mode */
+  #app::-webkit-scrollbar{height:14px;width:14px}
+  #app::-webkit-scrollbar-track{background:#0b1220;border-top:1px solid var(--grid)}
+  #app::-webkit-scrollbar-thumb{background:#3a4a67;border-radius:7px;border:2px solid #0b1220}
+  #app::-webkit-scrollbar-thumb:hover{background:#5a7099}
+  header{padding:6px 12px;border-bottom:1px solid var(--grid);display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--panel2);flex-shrink:0}
+  header h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.2px}
+  header .meta{color:var(--muted);font-size:12px}
+  .controls{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap}
+  .controls label{color:var(--muted);font-size:12px;margin-right:4px}
+  .seg{display:flex;background:#0b1220;border:1px solid var(--grid);border-radius:8px;overflow:hidden}
+  .seg button{background:transparent;color:var(--ink);border:0;padding:6px 10px;font-size:12px;cursor:pointer}
+  .seg button.active{background:#1b2a3e;color:#fff}
+  .seg button+button{border-left:1px solid var(--grid)}
+  .num{background:#0b1220;border:1px solid var(--grid);color:var(--ink);border-radius:8px;padding:6px 8px;width:64px;font-size:12px}
+  main{padding:6px 8px 24px;display:flex;flex-direction:column;gap:8px}
+  section{margin:0}
+  h2{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.3px;text-transform:uppercase;margin:0 0 3px}
+
+  /* Tab bar */
+  .tabs{display:flex;gap:0;border-bottom:2px solid var(--grid);padding:0 12px;background:var(--panel2)}
+  .tab{padding:10px 18px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border:0;background:transparent;border-bottom:3px solid transparent;margin-bottom:-2px}
+  .tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+  .tab:hover{color:var(--ink)}
+  .tabpane{display:none}
+  .tabpane.active{display:block}
+
+  /* PowerMarks strip */
+  .pm{border:2px solid #2a3852;border-radius:10px;background:var(--panel);overflow:hidden}
+  .pm table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed;font-size:11px}
+  .pm th, .pm td{padding:4px 4px;text-align:center;border-right:1px solid #2a3852;border-bottom:1px solid #2a3852;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .pm tr:last-child td{border-bottom:0}
+  .pm th{background:#0e1a2a;color:#cfd8e6;font-weight:700;font-size:10px;letter-spacing:.3px;border-bottom:2px solid #3a4a67}
+  .pm td:first-child, .pm th:first-child{background:#0e1a2a;text-align:left;padding-left:8px;color:#cfd8e6;font-weight:700;width:100px;font-size:10px;border-right:2px solid #3a4a67}
+  .pm .sep{width:8px;background:#0b0f14!important;border-right:2px solid #3a4a67!important;border-left:2px solid #3a4a67}
+  .pm .min-row td{background:#0e2620!important;color:#7fd6b5;border-color:#1e3a30}
+  .pm .max-row td{background:#2a1418!important;color:#f0a0a0;border-color:#4a2028}
+  .pm .min-row td:first-child{background:#0e2620!important;color:#7fd6b5}
+  .pm .max-row td:first-child{background:#2a1418!important;color:#f0a0a0}
+  .pm .pLo-row td{background:#0f1e18!important;color:#a6ecc9}
+  .pm .pHi-row td{background:#1e1416!important;color:#f5c2c2}
+  .pm .pLo-row td:first-child{background:#0f1e18!important;color:#a6ecc9}
+  .pm .pHi-row td:first-child{background:#1e1416!important;color:#f5c2c2}
+  .pm .p05-row td{background:#0c1e18!important;color:#8fd9b3}
+  .pm .p95-row td{background:#241416!important;color:#e9a8a8}
+  .pm .p05-row td:first-child{background:#0c1e18!important;color:#8fd9b3}
+  .pm .p95-row td:first-child{background:#241416!important;color:#e9a8a8}
+  .pm .heat-1{background:#0e3d2a!important;color:#c8f7dc}
+  .pm .heat-2{background:#12513a!important;color:#c8f7dc}
+  .pm .heat-3{background:#1a4a3c!important;color:#dff5e8}
+  .pm .heat-4{background:#22323e!important;color:#e6edf5}
+  .pm .heat-5{background:#3a2a2a!important;color:#f5dede}
+  .pm .heat-6{background:#5a1a20!important;color:#ffd0d0}
+  .pm .heat-7{background:#7a1015!important;color:#ffe0e0}
+  .pm .pct-active td:first-child{background:#1a1a0e!important;color:#ffd23a;border-left:2px solid var(--accent);font-weight:700}
+  .pm .pct-active td{border-top:2px solid #3a3a1a;border-bottom:1px solid #3a3a1a}
+  .pm .trig-buy{outline:2px solid #31c48d;outline-offset:-2px;box-shadow:inset 0 0 0 2px rgba(49,196,141,.15)}
+  .pm .trig-sell{outline:2px solid #ef4444;outline-offset:-2px;box-shadow:inset 0 0 0 2px rgba(239,68,68,.15)}
+  .pm .rec-row td{background:#1a1405!important;color:#f5c518;font-weight:800;letter-spacing:.6px;border-top:2px solid #6b530c;font-size:11px}
+  .pm .rec-row td:first-child{color:#f5c518!important;background:#1a1405!important;border-right:2px solid #6b530c}
+  .pm .rec-buy{color:#31c48d!important;background:#0f3a2b!important;text-shadow:0 0 8px rgba(49,196,141,.55)}
+  .pm .rec-sell{color:#ff6b6b!important;background:#3a1414!important;text-shadow:0 0 8px rgba(239,68,68,.55)}
+  .pm .rec-hold{color:#c9a466!important;background:#1a1405!important}
+
+  /* P50 row: subtle center-of-distribution styling */
+  .pm .p50-row td{background:#1a1a22!important;color:#e6d9a3;border-top:1px dashed #3a3a4a;border-bottom:1px dashed #3a3a4a}
+  .pm .p50-row td:first-child{background:#1a1a22!important;color:#f5d97a;font-weight:700}
+  /* Current Percentile row: mirrors current-market emphasis */
+  .pm .cur-pct-row td:first-child{background:#0e1a1e!important;color:#8fd6ea;font-weight:700;border-bottom:1px solid #2a4a5a}
+  .pm .cur-pct-row td{border-bottom:1px solid #2a4a5a;font-weight:700}
+  /* P10 Bid — mint band with GOLD border */
+  .pm .p10bid-row td{background:#003d2e!important;color:#00ffb0!important;font-weight:800;font-size:12.5px;border-top:3px solid #f5c518!important;border-bottom:3px solid #f5c518!important;box-shadow:inset 0 0 0 1px rgba(245,197,24,.35);text-shadow:0 0 6px rgba(0,255,176,.35)}
+  .pm .p10bid-row td:first-child{background:#005a44!important;color:#5cffbb!important;font-weight:900;letter-spacing:.6px;text-transform:uppercase;font-size:11.5px;border-top:3px solid #f5c518!important;border-bottom:3px solid #f5c518!important;border-left:4px solid #f5c518!important}
+  .pm .p10bid-row td:last-child{border-right:4px solid #f5c518!important}
+  /* P90 Offer — magenta band with GOLD border */
+  .pm .p90offer-row td{background:#4a0020!important;color:#ff4d8f!important;font-weight:800;font-size:12.5px;border-top:3px solid #f5c518!important;border-bottom:3px solid #f5c518!important;box-shadow:inset 0 0 0 1px rgba(245,197,24,.35);text-shadow:0 0 6px rgba(255,45,122,.4)}
+  .pm .p90offer-row td:first-child{background:#66082e!important;color:#ff85a8!important;font-weight:900;letter-spacing:.6px;text-transform:uppercase;font-size:11.5px;border-top:3px solid #f5c518!important;border-bottom:3px solid #f5c518!important;border-left:4px solid #f5c518!important}
+  .pm .p90offer-row td:last-child{border-right:4px solid #f5c518!important}
+  /* What-If input & output rows */
+  .pm .whatif-in-row td{background:#12121c!important;padding:2px 4px;border-top:2px solid #3a3a4a}
+  .pm .whatif-in-row td:first-child{background:#12121c!important;color:#c9a466;font-weight:700;font-size:10.5px;letter-spacing:.3px;text-transform:uppercase}
+  .pm input.whatif-in{width:100%;box-sizing:border-box;background:#0a0a12;border:1px solid #3a3a4a;color:#f5e7a0;font:600 11.5px 'JetBrains Mono',ui-monospace,monospace;text-align:center;padding:3px 4px;border-radius:3px;outline:none}
+  .pm input.whatif-in:focus{border-color:#f5c518;box-shadow:0 0 0 1px rgba(245,197,24,.35);background:#12120a}
+  .pm .whatif-out-row td{background:#0f0f18!important;color:#8fd6ea;font-weight:700;border-bottom:2px solid #3a3a4a}
+  .pm .whatif-out-row td:first-child{background:#0f0f18!important;color:#c9a466;font-weight:700;font-size:10.5px;letter-spacing:.3px;text-transform:uppercase}
+  .pm .whatif-out{display:inline-block;min-width:36px;padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',ui-monospace,monospace}
+  .pm .whatif-out.heat-1,.pm .whatif-out.heat-2,.pm .whatif-out.heat-3,.pm .whatif-out.heat-4,.pm .whatif-out.heat-5,.pm .whatif-out.heat-6,.pm .whatif-out.heat-7{color:inherit}
+
+  /* Chart grid: 2 wide x 6 tall */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(6,340px);gap:10px}
+  .card{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:8px 12px 8px;position:relative;display:flex;flex-direction:column;overflow:hidden}
+  .card .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-shrink:0}
+  .card .ttl{font-size:14px;font-weight:700;letter-spacing:.2px}
+  .card .px{font-size:18px;color:var(--ink);font-weight:800}
+  .card .sub{color:var(--muted);font-size:11px;margin-top:2px;flex-shrink:0}
+  .card .badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px;margin-left:6px;vertical-align:middle}
+  .b-buy{background:rgba(49,196,141,.18);color:#31c48d;border:1px solid rgba(49,196,141,.35)}
+  .b-sell{background:rgba(239,68,68,.18);color:#ef4444;border:1px solid rgba(239,68,68,.35)}
+  .b-mid{background:rgba(154,168,187,.10);color:var(--muted);border:1px solid rgba(154,168,187,.25)}
+  .cv{flex:1;min-height:0;position:relative}
+
+  /* Percentile status box floating on chart */
+  .pctbox{position:absolute;top:8px;right:10px;padding:8px 10px;border-radius:8px;font-size:11px;font-weight:700;line-height:1.35;z-index:3;min-width:150px;backdrop-filter:blur(4px);box-shadow:0 4px 14px rgba(0,0,0,.35)}
+  .pctbox .big{font-size:20px;font-weight:800;letter-spacing:.3px;line-height:1;margin-bottom:4px}
+  .pctbox .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.5px;opacity:.75;font-weight:600}
+  .pctbox .row{display:flex;justify-content:space-between;gap:8px;font-size:10px;margin-top:2px}
+  .pctbox.pct-buy{background:rgba(15,58,43,.85);border:1.5px solid #31c48d;color:#c8f7dc}
+  .pctbox.pct-sell{background:rgba(58,20,20,.85);border:1.5px solid #ef4444;color:#ffd0d0}
+  .pctbox.pct-mid{background:rgba(26,34,46,.85);border:1.5px solid #4a5a72;color:#e6edf5}
+
+  /* paste modal */
+  #paste{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;align-items:center;justify-content:center}
+  #paste.on{display:flex}
+  #paste .box{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:16px;width:min(720px,92vw)}
+  #paste textarea{width:100%;height:220px;background:#0b1220;color:var(--ink);border:1px solid var(--grid);border-radius:8px;padding:8px;font:12px/1.35 ui-monospace,Menlo,monospace}
+  .row{display:flex;gap:8px;align-items:center}
+  .btn{background:#1b2a3e;color:#fff;border:1px solid var(--grid);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:12px}
+  .btn.primary{background:#1e3a5f;border-color:#274b76}
+  .hint{color:var(--muted);font-size:11px}
+
+  /* Execution scorecard */
+  .exec-hd{display:flex;gap:16px;align-items:center;padding:12px 14px;background:var(--panel);border:1px solid var(--grid);border-radius:10px}
+  .exec-hd h2{font-size:14px;color:var(--ink);text-transform:none;letter-spacing:.2px;margin:0}
+  .exec-hd .month-sel{background:#0b1220;color:var(--ink);border:1px solid var(--grid);padding:6px 10px;border-radius:8px;font-size:13px;font-weight:600}
+  .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:10px}
+  .tile{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:12px}
+  .tile .k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+  .tile .v{font-size:22px;font-weight:800;margin-top:4px;letter-spacing:.3px}
+  .tile .s{font-size:11px;color:var(--muted);margin-top:2px}
+  .tile.good .v{color:var(--grade-a)}
+  .tile.bad  .v{color:var(--grade-f)}
+  .tile.mid  .v{color:var(--grade-c)}
+
+  .commentary{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:14px 18px;margin-top:10px;line-height:1.55;font-size:13px}
+  .commentary h3{margin:0 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+  .commentary p{margin:0 0 8px}
+  .commentary ul{margin:2px 0 8px 20px;padding:0}
+  .commentary li{margin-bottom:3px}
+  .callout{border-left:3px solid var(--accent);padding-left:12px;margin:8px 0}
+  .callout.good{border-left-color:var(--grade-a)}
+  .callout.bad{border-left-color:var(--grade-f)}
+  .callout.mid{border-left-color:var(--grade-c)}
+  .callout .head{font-weight:700;font-size:12px}
+  .callout .body{color:var(--muted);font-size:12px;margin-top:2px}
+
+  .exec-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--panel);border:1px solid var(--grid);border-radius:10px;overflow:hidden;margin-top:10px}
+  .exec-table th, .exec-table td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--grid);white-space:nowrap}
+  .exec-table th{background:#0e1a2a;color:#cfd8e6;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px;text-align:right}
+  .exec-table th:first-child, .exec-table td:first-child{text-align:left}
+  .exec-table td.bs-B{color:#7ecbff;font-weight:700}
+  .exec-table td.bs-S{color:#ff9db6;font-weight:700}
+  .exec-table td.grade{font-weight:800;letter-spacing:.5px}
+  .exec-table td.grade-A{background:rgba(49,196,141,.18);color:var(--grade-a)}
+  .exec-table td.grade-B{background:rgba(126,201,150,.14);color:var(--grade-b)}
+  .exec-table td.grade-C{background:rgba(201,164,102,.14);color:var(--grade-c)}
+  .exec-table td.grade-D{background:rgba(226,138,74,.14);color:var(--grade-d)}
+  .exec-table td.grade-F{background:rgba(239,68,68,.18);color:var(--grade-f)}
+  .exec-table td.pnl-GOOD{color:var(--grade-a);font-weight:700}
+  .exec-table td.pnl-BAD{color:var(--grade-f);font-weight:700}
+
+  .rules{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:14px 18px;margin-top:10px}
+  .rules h3{margin:0 0 8px;font-size:12px;color:#f5c518;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  .rules ol{margin:0;padding-left:22px;font-size:13px;line-height:1.6}
+  .rules ol li{margin-bottom:4px}
+
+  /* Bucket P&L tables */
+  .bucket-wrap{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .bucket-card{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:12px 14px}
+  .bucket-card h3{margin:0 0 8px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  .bucket-table{width:100%;border-collapse:collapse;font-size:12px}
+  .bucket-table th,.bucket-table td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--grid);white-space:nowrap}
+  .bucket-table th:first-child,.bucket-table td:first-child{text-align:left;font-weight:600}
+  .bucket-table th{color:#9aa8bb;font-size:10px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+  /* Rules banner — firm, locked, prominent */
+  .rules-banner{background:linear-gradient(135deg,rgba(11,18,32,.85),rgba(15,25,42,.7));border:2px solid rgba(245,196,72,.55);border-radius:14px;padding:16px 18px;margin-bottom:14px;box-shadow:0 0 0 1px rgba(245,196,72,.15) inset,0 6px 24px rgba(0,0,0,.35)}
+  .rb-hd{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+  .rb-badge{background:linear-gradient(180deg,#f5c448,#e0a800);color:#0b1220;font-weight:900;font-size:13px;letter-spacing:1.5px;padding:6px 12px;border-radius:6px;box-shadow:0 2px 8px rgba(245,196,72,.35)}
+  .rb-sub{color:#c9d5e5;font-size:13px;font-weight:500}
+  .rb-sub b{color:#f5c448;font-weight:700}
+  .rb-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .rb-card{position:relative;background:rgba(15,25,42,.75);border:1.5px solid var(--grid);border-radius:10px;padding:14px 12px 12px 44px;min-height:120px}
+  .rb-card .rb-n{position:absolute;left:10px;top:12px;width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;color:#0b1220;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+  .rb-card .rb-b{font-weight:900;font-size:14px;color:#ffffff;margin-bottom:6px;line-height:1.25;letter-spacing:.2px;text-transform:uppercase}
+  .rb-card .rb-t{font-size:12px;color:#c9d5e5;line-height:1.45}
+  .rb-card .rb-t b{color:#ffffff;font-weight:700}
+  .rb-card .rb-t .rb-pos{color:#31c48d;font-weight:700}
+  .rb-card .rb-t .rb-neg{color:#ef4444;font-weight:700}
+  .rb-trend  {border-color:rgba(59,130,246,.6);background:linear-gradient(180deg,rgba(59,130,246,.16),rgba(59,130,246,.04))}
+  .rb-trend  .rb-n{background:linear-gradient(180deg,#60a5fa,#3b82f6);color:#fff}
+  .rb-with   {border-color:rgba(49,196,141,.6);background:linear-gradient(180deg,rgba(49,196,141,.16),rgba(49,196,141,.04))}
+  .rb-with   .rb-n{background:linear-gradient(180deg,#31c48d,#22a679);color:#0b1220}
+  .rb-against{border-color:rgba(245,196,72,.7);background:linear-gradient(180deg,rgba(245,196,72,.18),rgba(245,196,72,.04))}
+  .rb-against .rb-n{background:linear-gradient(180deg,#f5c448,#e0a800);color:#0b1220}
+  .rb-never  {border-color:rgba(239,68,68,.6);background:linear-gradient(180deg,rgba(239,68,68,.16),rgba(239,68,68,.04))}
+  .rb-never  .rb-n{background:linear-gradient(180deg,#f87171,#ef4444);color:#fff}
+  .rb-size   {border-color:rgba(168,85,247,.6);background:linear-gradient(180deg,rgba(168,85,247,.16),rgba(168,85,247,.04))}
+  .rb-size   .rb-n{background:linear-gradient(180deg,#c084fc,#a855f7);color:#fff}
+  @media (max-width:1300px){ .rb-grid{grid-template-columns:repeat(3,1fr)} }
+  @media (max-width:900px){ .rb-grid{grid-template-columns:repeat(2,1fr)} }
+
+  /* ===== ALERT BANNER (Strong Buys / Strong Sells) ===== */
+  .alert-banner{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+  .alert-side{border-radius:14px;padding:14px 16px;position:relative;overflow:hidden}
+  .alert-buy {background:linear-gradient(135deg,rgba(20,60,35,.9),rgba(15,45,25,.7));border:2px solid #3fbf5c;box-shadow:0 0 0 1px rgba(63,191,92,.2) inset,0 6px 24px rgba(0,0,0,.35)}
+  .alert-sell{background:linear-gradient(135deg,rgba(80,20,20,.9),rgba(55,15,15,.7));border:2px solid #d43f3f;box-shadow:0 0 0 1px rgba(212,63,63,.2) inset,0 6px 24px rgba(0,0,0,.35)}
+  .alert-hd{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .alert-badge{font-weight:900;font-size:12px;letter-spacing:1.5px;padding:5px 10px;border-radius:6px}
+  .alert-buy .alert-badge {background:linear-gradient(180deg,#3fbf5c,#2ea34a);color:#0a0f0a}
+  .alert-sell .alert-badge{background:linear-gradient(180deg,#e85555,#c93030);color:#fff}
+  .alert-arrow{font-size:20px;line-height:1}
+  .alert-buy  .alert-arrow{color:#3fbf5c}
+  .alert-sell .alert-arrow{color:#e85555}
+  .alert-hd-sub{color:#c9d5e5;font-size:12px;font-weight:500}
+  .alert-items{display:flex;flex-direction:column;gap:6px}
+  .alert-item{display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,.28);border-radius:8px;padding:8px 10px}
+  .alert-item .ai-name{font-weight:800;font-size:13px;color:#fff;letter-spacing:.3px;min-width:70px}
+  .alert-item .ai-mark{font-family:monospace;font-weight:700;font-size:13px;color:#f5c448;min-width:70px;text-align:right}
+  .alert-item .ai-pct {font-family:monospace;font-weight:700;font-size:12px;min-width:80px;text-align:right}
+  .alert-buy  .ai-pct{color:#3fbf5c}
+  .alert-sell .ai-pct{color:#e85555}
+  .alert-item .ai-note{color:#c9d5e5;font-size:11px;flex:1;text-align:right;padding-left:8px}
+  .alert-empty{color:#8a95a5;font-size:12px;font-style:italic;padding:8px 4px}
+  @media (max-width:900px){ .alert-banner{grid-template-columns:1fr} }
+  @media (max-width:600px){ .rb-grid{grid-template-columns:1fr} }
+
+  .bucket-table tr.hi-good{background:rgba(49,196,141,.08)}
+  .bucket-table tr.hi-bad{background:rgba(239,68,68,.08)}
+  .bucket-table tr.hi-chase{background:rgba(245,196,72,.16);box-shadow:inset 3px 0 0 0 #f5c448}
+  .bucket-table tr.hi-chase td:first-child{color:#f5c448;font-weight:800}
+  .bucket-card.bucket-buys{background:linear-gradient(180deg,rgba(49,196,141,.08),rgba(49,196,141,.02));border-color:rgba(49,196,141,.28)}
+  .bucket-card.bucket-sells{background:linear-gradient(180deg,rgba(239,68,68,.08),rgba(239,68,68,.02));border-color:rgba(239,68,68,.28)}
+  .bucket-table td.pos{color:var(--grade-a);font-weight:700}
+  .bucket-table td.neg{color:var(--grade-f);font-weight:700}
+  .bucket-table td.dim{color:var(--muted)}
+  .bucket-bar{position:relative;height:14px;min-width:80px;background:#0b1220;border-radius:3px;overflow:hidden}
+  .bucket-bar .fill{position:absolute;top:0;bottom:0;left:50%}
+  .bucket-bar .fill.pos{background:linear-gradient(90deg,var(--grade-a),rgba(49,196,141,.3));border-radius:0 3px 3px 0}
+  .bucket-bar .fill.neg{background:linear-gradient(-90deg,var(--grade-f),rgba(239,68,68,.3));border-radius:3px 0 0 3px}
+  .bucket-bar .mid{position:absolute;top:0;bottom:0;left:50%;width:1px;background:#3a4a67}
+
+  .exec-table td.pnl-pos{color:var(--grade-a);font-weight:700}
+  .exec-table td.pnl-neg{color:var(--grade-f);font-weight:700}
+
+  /* Realized vs Strip card */
+  .realized-card{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:10px 12px}
+  .realized-card h3{margin:0 0 6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700;display:flex;gap:10px;align-items:baseline}
+  .realized-card h3 .sub{font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500}
+  .rz-grid{display:grid;grid-template-columns:repeat(11,1fr);gap:0;border:1px solid var(--grid);border-radius:6px;overflow:hidden}
+  .rz-col{display:flex;flex-direction:column;font-size:11px;border-right:1px solid var(--grid)}
+  .rz-col:last-child{border-right:0}
+  .rz-col .yr{background:#0e1a2a;color:#cfd8e6;font-weight:700;padding:5px 6px;text-align:center;border-bottom:1px solid var(--grid);letter-spacing:.3px}
+  .rz-col .rz-cell{padding:4px 6px;text-align:center;border-bottom:1px solid var(--grid);white-space:nowrap}
+  .rz-col .rz-cell:last-child{border-bottom:0}
+  .rz-col .lbl{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.4px}
+  .rz-col .val{font-weight:700;font-size:12px;margin-top:1px}
+  .rz-realized .val{color:#7fd6b5}
+  .rz-strip .val{color:#f5c518}
+  .rz-full .val{color:#e6edf5}
+  .rz-hi{background:rgba(239,68,68,.10)}
+  .rz-lo{background:rgba(49,196,141,.10)}
+
+  /* Daily settle card */
+  .daily-card{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:10px 12px}
+  .daily-card h3{margin:0 0 6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700;display:flex;gap:10px;align-items:baseline}
+  .daily-card h3 .sub{font-size:10px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500}
+  .daily-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:10px;align-items:start}
+  .daily-chart-wrap{position:relative;height:260px}
+  .daily-lookback{display:inline-flex;gap:2px;background:#0e1a2a;border:1px solid var(--grid);border-radius:6px;padding:2px;margin-left:6px}
+  .daily-lookback button{padding:3px 8px;border-radius:4px;border:0;background:transparent;color:var(--text);font-weight:600;font-size:10px;cursor:pointer}
+  .daily-lookback button.active{background:var(--accent);color:#0b1220;font-weight:700}
+  .daily-stats{border:1px solid var(--grid);border-radius:6px;overflow:hidden;font-size:10.5px}
+  .daily-stats table{width:100%;border-collapse:collapse}
+  .daily-stats th, .daily-stats td{padding:4px 8px;text-align:right;border-bottom:1px solid var(--grid);white-space:nowrap}
+  .daily-stats th{color:var(--muted);background:#0e1a2a;font-weight:600;text-transform:uppercase;letter-spacing:.3px;font-size:9.5px}
+  .daily-stats td.lbl{text-align:left;color:#cfd8e6;font-weight:700}
+  .daily-stats tr:last-child td{border-bottom:0}
+
+  /* Forward Curve Path tab */
+  .fcp-tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:10px 0}
+  .fcp-tiles .tile{background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:10px 12px}
+  .fcp-tiles .tile .k{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  .fcp-tiles .tile .v{font-size:22px;font-weight:800;margin-top:4px;line-height:1.1}
+  .fcp-tiles .tile .s{font-size:10.5px;color:var(--muted);margin-top:3px}
+  .fcp-tiles .tile.good .v{color:var(--grade-a)}
+  .fcp-tiles .tile.bad .v{color:var(--grade-f)}
+  .fcp-two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .fcp-side{background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:10px 12px}
+  .fcp-side h3{margin:0 0 6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  .fcp-season-table, .fcp-year-table, .fcp-table{width:100%;border-collapse:collapse;font-size:11px}
+  .fcp-season-table th, .fcp-year-table th, .fcp-table th{background:#0e1a2a;color:var(--muted);padding:5px 6px;text-align:right;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--grid)}
+  .fcp-season-table th:first-child, .fcp-year-table th:first-child, .fcp-table th:first-child{text-align:left}
+  .fcp-season-table td, .fcp-year-table td, .fcp-table td{padding:4px 6px;text-align:right;border-bottom:1px solid var(--grid);white-space:nowrap}
+  .fcp-season-table td:first-child, .fcp-year-table td:first-child, .fcp-table td:first-child{text-align:left;font-weight:700;color:#cfd8e6}
+  .fcp-season-table tr:last-child td, .fcp-year-table tr:last-child td, .fcp-table tr:last-child td{border-bottom:0}
+  .fcp-table .col-sub{color:var(--muted);font-size:9px;font-weight:400}
+  .fcp-log-hd{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px}
+  .d-pos{color:var(--grade-a);font-weight:700}
+  .d-neg{color:var(--grade-f);font-weight:700}
+  .pill{padding:2px 6px;border-radius:4px;font-size:9.5px;font-weight:700;letter-spacing:.3px}
+  .pill-under{background:rgba(49,196,141,.15);color:#5ee0a8}
+  .pill-over{background:rgba(239,68,68,.15);color:#f87171}
+  .pill-flat{background:rgba(148,163,184,.15);color:#94a3b8}
+
+  /* Path Projector */
+  .path-proj{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+  .path-proj-hd{margin-bottom:8px}
+  .path-proj-inputs{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;padding:10px;background:#0e1a2a;border-radius:6px;border:1px solid var(--grid)}
+  .path-lbl{display:flex;flex-direction:column;gap:3px;font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);font-weight:700}
+  .path-lbl input, .path-lbl select{background:#0b1522;border:1px solid var(--grid);color:#e4e9f1;border-radius:4px;padding:4px 6px}
+  .proj-live{display:flex;gap:14px;margin-left:auto;font-size:12px}
+  .proj-live b{color:#f5c56b;font-weight:700}
+  .proj-tabs{display:flex;gap:4px;margin:10px 0 6px}
+  .proj-tab{background:#0e1a2a;border:1px solid var(--grid);color:var(--muted);padding:5px 12px;font-size:11px;font-weight:700;border-radius:4px;cursor:pointer}
+  .proj-tab.active{background:#1f4b7a;color:#fff;border-color:#3877b8}
+  .proj-path-ctrl{display:flex;gap:16px;align-items:center;margin-bottom:6px}
+
+  /* Tighter monthly log + data bars */
+  .fcp-log td, .fcp-log th{padding:2px 6px;font-size:10.5px;line-height:1.1}
+  .fcp-log td, .fcp-log th{border-bottom:1px solid rgba(255,255,255,.04)}
+  .proj-term td, .proj-term th{padding:2px 6px;font-size:10.5px;line-height:1.1}
+  .proj-term td, .proj-term th{border-bottom:1px solid rgba(255,255,255,.04)}
+  .bar-th{text-align:center}
+  .bar-cell{position:relative;padding:0 4px !important;min-width:180px;text-align:center;font-weight:700;font-size:10.5px;height:16px}
+  .bar-cell .bar-track{position:absolute;top:2px;bottom:2px;left:50%;width:0;background:rgba(49,196,141,.55);border-right:2px solid #31c48d;border-radius:0 2px 2px 0}
+  .bar-cell .bar-track.neg{left:auto;right:50%;background:rgba(239,68,68,.55);border-right:0;border-left:2px solid #ef4444;border-radius:2px 0 0 2px}
+  .bar-cell .bar-label{position:relative;z-index:2;font-size:10px}
+  .bar-cell .bar-axis{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(255,255,255,.15);z-index:1}
+
+  /* Split projector layout */
+  .proj-split{display:grid;grid-template-columns:280px 1fr;gap:12px;margin-top:8px}
+  .proj-left{background:#0e1a2a;border:1px solid var(--grid);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:12px}
+  .proj-input-stack{display:flex;flex-direction:column;gap:8px}
+  .proj-input-stack .path-lbl{width:100%}
+  .proj-live-stack{border-top:1px solid var(--grid);padding-top:8px;display:flex;flex-direction:column;gap:6px}
+  .pk-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .pk-k{color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-size:10px;font-weight:700}
+  .pk-v{font-size:15px;font-weight:800;color:#f5c56b}
+  .proj-right{background:#0e1a2a;border:1px solid var(--grid);border-radius:8px;padding:8px 12px;display:flex;flex-direction:column;gap:6px}
+  .proj-mini-hd{display:flex;justify-content:space-between;align-items:baseline}
+  .proj-mini-title{color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-size:10px;font-weight:700}
+  .proj-mini-legend{color:var(--muted);font-size:10px;display:inline-flex;align-items:center;gap:4px}
+  .lg-dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .proj-curve-chart{height:230px;position:relative}
+  .proj-move-hd{margin-top:2px}
+  .proj-move-chart{height:130px;position:relative}
+  .proj-tip{margin-top:6px;background:rgba(245,197,107,.06);border:1px solid rgba(245,197,107,.3);border-radius:6px;padding:6px 10px;font-size:11px;color:#e6eef7;line-height:1.35}
+  .proj-tip b{color:#f5c56b}
+  .proj-tip .up{color:#31c48d;font-weight:700}
+  .proj-tip .dn{color:#ef4444;font-weight:700}
+
+  /* Curve Response tab */
+  .resp-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+  .resp-tiles .tile{background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:10px 12px}
+  .resp-tiles .tile .k{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  .resp-tiles .tile .v{font-size:22px;font-weight:800;margin-top:4px;line-height:1.1;color:#cfd8e6}
+  .resp-tiles .tile .s{font-size:10.5px;color:var(--muted);margin-top:3px}
+  .resp-two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+  .resp-chart-wrap{background:var(--panel);border:1px solid var(--grid);border-radius:8px;padding:8px 12px;margin-top:6px}
+  .resp-scatter-hd{display:flex;justify-content:space-between;align-items:baseline;margin:8px 0 4px}
+  .resp-k-tabs{display:flex;gap:4px;flex-wrap:wrap}
+  .resp-k-tabs button{background:#0e1a2a;border:1px solid var(--grid);color:var(--muted);padding:3px 8px;font-size:10px;font-weight:700;border-radius:4px;cursor:pointer}
+  .resp-k-tabs button.active{background:#1f4b7a;color:#fff;border-color:#3877b8}
+  .resp-events td, .resp-events th{padding:3px 5px;font-size:10px}
+  .cell-pos{color:var(--grade-a);font-weight:600}
+  .cell-neg{color:var(--grade-f);font-weight:600}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <h1>AESO Strip — PowerMarks Dashboard</h1>
+  <div class="meta" id="meta">Loading…</div>
+  <div class="controls">
+    <label>Lookback</label>
+    <div class="seg" id="lookback">
+      <button data-d="30">30D</button>
+      <button data-d="90" class="active">90D</button>
+      <button data-d="180">180D</button>
+      <button data-d="365">1Y</button>
+      <button data-d="730">2Y</button>
+      <button data-d="0">All</button>
+    </div>
+    <label style="margin-left:12px">MA</label>
+    <input class="num" id="ma1" type="number" min="2" max="200" value="10"/>
+    <input class="num" id="ma2" type="number" min="2" max="200" value="30"/>
+    <label style="margin-left:12px">Signal band</label>
+    <select class="num" id="band" style="width:auto">
+      <option value="5">P5 / P95</option>
+      <option value="10">P10 / P90</option>
+      <option value="15" selected>P15 / P85</option>
+      <option value="20">P20 / P80</option>
+      <option value="25">P25 / P75</option>
+    </select>
+    <button class="btn primary" id="openPaste" style="margin-left:12px">Update from PowerMarks…</button>
+    <button class="btn" id="dropBtn">Drop daily file</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none"/>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-pane="dash">Strip Dashboard</button>
+  <button class="tab" data-pane="exec">Execution Scorecard</button>
+  <button class="tab" data-pane="pctpath">Percentiles Path</button>
+  <button class="tab" data-pane="fcp">Forward Curve Path</button>
+  <button class="tab" data-pane="balmo">Balmo Path</button>
+  <button class="tab" data-pane="season">Seasonal Playbook</button>
+</nav>
+
+<main>
+  <!-- ============ TAB 1: DASHBOARD ============ -->
+  <div class="tabpane active" id="pane-dash">
+
+    <!-- ===== ALERT BANNER: Strong Buys / Strong Sells ===== -->
+    <section class="alert-banner" id="alertBanner">
+      <div class="alert-side alert-buy">
+        <div class="alert-hd">
+          <span class="alert-arrow">&#x25BC;</span>
+          <span class="alert-badge">STRONG BUYS &mdash; HISTORICALLY CHEAP</span>
+          <span class="alert-hd-sub" id="alertBuySub">contracts at &le;10% of range</span>
+        </div>
+        <div class="alert-items" id="alertBuyItems"></div>
+      </div>
+      <div class="alert-side alert-sell">
+        <div class="alert-hd">
+          <span class="alert-arrow">&#x25B2;</span>
+          <span class="alert-badge">STRONG SELLS &mdash; HISTORICALLY RICH</span>
+          <span class="alert-hd-sub" id="alertSellSub">contracts at &ge;90% of range</span>
+        </div>
+        <div class="alert-items" id="alertSellItems"></div>
+      </div>
+    </section>
+
+    <section class="rules-banner" aria-label="Five rules to live by">
+      <div class="rb-hd">
+        <span class="rb-badge">FIVE RULES — LOCKED</span>
+        <span class="rb-sub">Direction pays the bill. Percentile picks the price. <b>Read before every ticket.</b></span>
+      </div>
+      <div class="rb-grid">
+        <div class="rb-card rb-trend">
+          <div class="rb-n">1</div>
+          <div class="rb-b">Trend first, always</div>
+          <div class="rb-t"><b>Name the trend before you look at price.</b> Rising, falling, or sideways — use the Percentiles Path tab. Sep-22 buys made <span class="rb-pos">+$4.1M</span>; Oct-26 buys lost <span class="rb-neg">−$1.8M</span>. Only difference: the trend.</div>
+        </div>
+        <div class="rb-card rb-with">
+          <div class="rb-n">2</div>
+          <div class="rb-b">With the trend → hit it</div>
+          <div class="rb-t"><b>Any decile works.</b> Sep-22 chase buys 80–100% averaged <span class="rb-pos">+$28/MWh</span> × 19 tickets. Oct-26 chase sells 0–20% averaged <span class="rb-pos">+$20/MWh</span> × 10. Take entries as they come, size up when trend is confirmed.</div>
+        </div>
+        <div class="rb-card rb-against">
+          <div class="rb-n">3</div>
+          <div class="rb-b">Against trend → 0–10% only</div>
+          <div class="rb-t"><b>One narrow window, small size.</b> Buying a falling market: 0–10% of range. Selling a rising market: 90–100%. Sep-22 buys at 0–10% made <span class="rb-pos">+$87/MWh</span> (best on sheet). Everywhere else against the trend: <span class="rb-neg">zero winners</span> on 44 tickets.</div>
+        </div>
+        <div class="rb-card rb-never">
+          <div class="rb-n">4</div>
+          <div class="rb-b">The 20–80% is the graveyard</div>
+          <div class="rb-t"><b>No counter-trend trades in the middle. Ever.</b> No trend support, no percentile support. Every worst ticket you've ever taken lives here. If it's not with the trend and it's not 0–10% or 90–100%: <span class="rb-neg">walk away.</span></div>
+        </div>
+        <div class="rb-card rb-size">
+          <div class="rb-n">5</div>
+          <div class="rb-b">Size the conviction, not the ego</div>
+          <div class="rb-t"><b>Full size only when trend + percentile agree.</b> Half-size on with-trend middle deciles. Quarter-size on the 0–10% / 90–100% counter-trend pokes. Never stack 10 tickets in 15 minutes chasing a move — that's <span class="rb-neg">Oct-7-2025</span>, and it cost <span class="rb-neg">−$264K.</span></div>
+        </div>
+      </div>
+    </section>
+    <section>
+      <div class="pm" id="pm"></div>
+    </section>
+    <section style="margin-top:8px">
+      <div class="daily-card" id="dailyCard"></div>
+    </section>
+    <section class="charts" style="margin-top:8px">
+      <div class="grid" id="allCharts"></div>
+    </section>
+  </div>
+
+  <!-- ============ TAB: PERCENTILES PATH ============ -->
+  <div class="tabpane" id="pane-pctpath">
+    <div class="row" style="gap:12px;align-items:center;flex-wrap:wrap;margin:4px 0 10px">
+      <h2 style="margin:0;font-size:15px">Percentiles Path \u2014 daily rolling % of range over time</h2>
+      <label class="hint" style="margin-left:auto">Window
+        <select id="pctWindow" class="num" style="width:auto;padding:3px 6px">
+          <option value="30">30d</option>
+          <option value="60">60d</option>
+          <option value="90" selected>90d</option>
+          <option value="180">180d</option>
+          <option value="365">1Y</option>
+          <option value="9999">All</option>
+        </select>
+      </label>
+      <label class="hint">Show
+        <select id="pctSpan" class="num" style="width:auto;padding:3px 6px">
+          <option value="90">90d</option>
+          <option value="180">180d</option>
+          <option value="365" selected>1Y</option>
+          <option value="730">2Y</option>
+          <option value="9999">All</option>
+        </select>
+      </label>
+      <span class="hint" style="color:var(--muted);font-size:11px">Each dot = (settle \u2212 window_min) / (window_max \u2212 window_min) on that day</span>
+    </div>
+    <section class="charts">
+      <div class="grid" id="allPctCharts"></div>
+    </section>
+  </div>
+
+  <!-- ============ TAB 3: FORWARD CURVE PATH ============ -->
+  <div class="tabpane" id="pane-fcp">
+
+    <!-- Path Projector at TOP -->
+    <div class="path-proj" id="pathProj">
+      <div class="path-proj-hd">
+        <h2 style="margin:0">Curve Path Projector — What Do the Next 12 Months Do If You're Right?</h2>
+        <span class="hint" style="color:var(--muted);font-size:11px;margin-top:4px;display:block">
+          Enter your view for where prompt settles. Uses β₁..₁₂ from the backtest. Red curve = your new market. Red band = where each month can trade (P25–P75 range).
+        </span>
+      </div>
+
+      <div class="proj-split">
+        <!-- LEFT: compact inputs -->
+        <div class="proj-left">
+          <div class="proj-input-stack">
+            <label class="path-lbl">Prompt month
+              <select id="projPromptMonth" style="font-size:12px"></select>
+            </label>
+            <label class="path-lbl">Current strip $/MWh
+              <input class="num" id="projPromptStrip" type="number" step="0.25" style="width:100px"/>
+            </label>
+            <label class="path-lbl">Your realized view $/MWh
+              <input class="num" id="projView" type="number" step="0.25" style="width:100px"/>
+            </label>
+          </div>
+          <div class="proj-live-stack">
+            <div class="pk-row"><span class="pk-k">Surprise</span><span class="pk-v" id="projSurpriseOut">—</span></div>
+            <div class="pk-row"><span class="pk-k">Expected prompt move</span><span class="pk-v" id="projPromptMoveOut">—</span></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: live curve + move-bar chart -->
+        <div class="proj-right">
+          <div class="proj-mini-hd">
+            <span class="hint proj-mini-title">Live curve reaction — current vs new market</span>
+            <span class="hint proj-mini-legend">
+              <span class="lg-dot" style="background:#94a3b8"></span> Current
+              <span class="lg-dot" style="background:#ef4444;margin-left:10px"></span> New market
+              <span class="lg-dot" style="background:rgba(239,68,68,.22);margin-left:10px"></span> P25–P75 range
+            </span>
+          </div>
+          <div class="proj-curve-chart"><canvas id="projMiniChart"></canvas></div>
+          <div class="proj-move-hd">
+            <span class="hint proj-mini-title">Expected $ move by forward month — new price on bar</span>
+          </div>
+          <div class="proj-move-chart"><canvas id="projMoveChart"></canvas></div>
+          <div class="proj-tip" id="projTip">—</div>
+        </div>
+      </div>
+
+      <div class="proj-tabs">
+        <button class="proj-tab active" data-view="terminal">Terminal (end-of-month) table</button>
+        <button class="proj-tab" data-view="path">Intramonth path (single forward)</button>
+      </div>
+
+      <!-- Terminal view (table only, chart removed — replaced by right-side viz) -->
+      <div class="proj-view" id="projTerminalView">
+        <div style="overflow-x:auto">
+          <table class="fcp-table proj-term" id="projTerminalTable">
+            <thead><tr>
+              <th style="text-align:left">Fwd month</th>
+              <th>k</th>
+              <th>Current</th>
+              <th>β</th>
+              <th class="bar-th">Expected move</th>
+              <th>New price</th>
+              <th>P25</th>
+              <th>P75</th>
+              <th>P05</th>
+              <th>P95</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Path view -->
+      <div class="proj-view" id="projPathView" style="display:none">
+        <div class="proj-path-ctrl">
+          <label class="path-lbl">Select forward month
+            <select id="projPathK"></select>
+          </label>
+          <span class="hint" id="projPathMeta" style="color:var(--muted)"></span>
+        </div>
+        <div style="height:340px;position:relative"><canvas id="projPathChart"></canvas></div>
+        <div style="overflow-x:auto;margin-top:6px">
+          <table class="fcp-table proj-term" id="projPathTable">
+            <thead><tr>
+              <th style="text-align:left">Progress</th>
+              <th>P05</th>
+              <th>P25</th>
+              <th>P50 (expected)</th>
+              <th>P75</th>
+              <th>P95</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Historical backtest block at BOTTOM -->
+    <div class="exec-hd" style="margin-top:20px">
+      <h2>Historical — Contract Settle (10D avg) vs Realized</h2>
+      <span class="hint" style="color:var(--muted);font-size:11px">
+        Contract settle = avg of last 10 trading days of strip prints before delivery month starts. Realized = avg of daily settles during the delivery month.
+      </span>
+    </div>
+
+    <div class="fcp-tiles" id="fcpTiles"></div>
+
+    <div class="fcp-two-col">
+      <div class="fcp-side">
+        <h3>Seasonality — by month-of-year</h3>
+        <table class="fcp-season-table" id="fcpSeasonTable"></table>
+      </div>
+      <div class="fcp-side">
+        <h3>By calendar year</h3>
+        <table class="fcp-year-table" id="fcpYearTable"></table>
+      </div>
+    </div>
+
+    <div class="fcp-chart-wrap">
+      <h3 style="margin:8px 0 4px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-size:11px;font-weight:700">Monthly delta — Realized minus Contract</h3>
+      <div style="height:280px;position:relative"><canvas id="fcpChart"></canvas></div>
+    </div>
+
+    <div class="fcp-log-hd" style="margin-top:8px">
+      <span class="hint" style="color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-size:10px;font-weight:700">Monthly log — 60 months</span>
+      <span class="hint" style="color:var(--muted);font-size:10px">Bar = realized minus contract; green = beat, red = missed</span>
+    </div>
+    <table class="fcp-table fcp-log" id="fcpTable">
+      <thead><tr>
+        <th style="text-align:left">Month</th>
+        <th>Contract</th>
+        <th>Realized</th>
+        <th class="bar-th">Delta $/MWh</th>
+        <th>Δ%</th>
+        <th>Market</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+
+  <!-- ============ TAB 5: BALMO PATH ============ -->
+  <div class="tabpane" id="pane-balmo">
+    <div class="path-proj" id="balmoProj">
+      <div class="path-proj-hd">
+        <h2 style="margin:0">Balmo Path Projector — Where Should Forwards Be If <span id="balmoCurName">This Month</span> Settles Where You Think?</h2>
+        <span class="hint" style="color:var(--muted);font-size:11px;margin-top:4px;display:block">
+          Baseline = 10‑day avg strip mark BEFORE the current month began. Enter your view for where this month <b>actually settles</b>. Uses β₁..₁₂ from the backtest to push the next 12 forwards up or down. Compare projected new market vs today's curve for buy/sell ammunition.
+        </span>
+      </div>
+
+      <div class="proj-split">
+        <div class="proj-left">
+          <div class="proj-input-stack">
+            <label class="path-lbl">Current month
+              <select id="balmoCurMonth" style="font-size:12px"></select>
+            </label>
+            <label class="path-lbl">10‑day pre-month baseline $/MWh
+              <input class="num" id="balmoBaseline" type="number" step="0.25" style="width:100px"/>
+            </label>
+            <div class="path-lbl">MTD settle so far <span id="balmoMTD" style="color:#f5c56b;font-weight:700">—</span></div>
+            <label class="path-lbl">Your <b>actual settle</b> view $/MWh
+              <input class="num" id="balmoView" type="number" step="0.25" style="width:100px"/>
+            </label>
+          </div>
+          <div class="proj-live-stack">
+            <div class="pk-row"><span class="pk-k">Current-month surprise</span><span class="pk-v" id="balmoSurpriseOut">—</span></div>
+            <div class="pk-row"><span class="pk-k">Expected next-month move</span><span class="pk-v" id="balmoNextMoveOut">—</span></div>
+          </div>
+        </div>
+
+        <div class="proj-right">
+          <div class="proj-mini-hd">
+            <span class="hint proj-mini-title">Live curve reaction — today's curve vs where it should be</span>
+            <span class="hint proj-mini-legend">
+              <span class="lg-dot" style="background:#94a3b8"></span> Today's curve
+              <span class="lg-dot" style="background:#ef4444;margin-left:10px"></span> Balmo-implied fair
+              <span class="lg-dot" style="background:rgba(239,68,68,.22);margin-left:10px"></span> P25–P75 range
+            </span>
+          </div>
+          <div class="proj-curve-chart"><canvas id="balmoMiniChart"></canvas></div>
+          <div class="proj-move-hd">
+            <span class="hint proj-mini-title">Expected $ move by forward month — new fair price on bar</span>
+          </div>
+          <div class="proj-move-chart"><canvas id="balmoMoveChart"></canvas></div>
+          <div class="proj-tip" id="balmoTip">—</div>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;margin-top:14px">
+        <table class="fcp-table proj-term" id="balmoTerminalTable">
+          <thead><tr>
+            <th style="text-align:left">Fwd month</th>
+            <th>k</th>
+            <th>Today's mark</th>
+            <th>β</th>
+            <th class="bar-th">Expected move</th>
+            <th>New fair</th>
+            <th class="bar-th">Mispricing</th>
+            <th>Signal</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============ TAB 2: EXECUTION SCORECARD (Sep-26 only) ============ -->
+  <div class="tabpane" id="pane-exec">
+    <div class="exec-hd">
+      <h2 id="execHeading">Execution Scorecard</h2>
+      <label class="hint">Fundamental view $/MWh
+        <input class="num" id="fundView" type="number" step="0.25" value="45" style="width:80px"/>
+      </label>
+      <label class="hint">Current mark <span id="curMark" style="color:var(--ink);font-weight:700;margin-left:4px">—</span></label>
+      <div class="hint" id="execMeta" style="margin-left:auto"></div>
+    </div>
+
+    <div class="tiles" id="execTiles"></div>
+
+    <div class="tiles" id="complianceTiles" style="margin-top:8px"></div>
+
+    <div class="bucket-wrap">
+      <div class="bucket-card bucket-buys">
+        <h3 id="buyBucketHead">P&L by Contract Percentile on Trade Day · BUYS</h3>
+        <div class="hint" style="margin-bottom:6px">Target zone (green) 0–20% · Chase zone (gold) 80–100% — avoid these</div>
+        <table class="bucket-table" id="buyBucketTable"></table>
+      </div>
+      <div class="bucket-card bucket-sells">
+        <h3 id="sellBucketHead">P&L by Contract Percentile on Trade Day · SELLS</h3>
+        <div class="hint" style="margin-bottom:6px">Target zone (green) 80–100% · Chase zone (gold) 0–20% — avoid these</div>
+        <table class="bucket-table" id="sellBucketTable"></table>
+      </div>
+    </div>
+
+    <div class="commentary" id="execCommentary"></div>
+
+    <div class="rules" id="execRules"></div>
+
+    <div class="row" style="gap:8px;margin:8px 0 6px;align-items:center;flex-wrap:wrap">
+      <span class="hint" style="color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-size:10px;font-weight:700">Trade log</span>
+      <div class="seg" role="tablist" style="display:inline-flex;gap:2px;background:#0e1a2a;border:1px solid var(--grid);border-radius:6px;padding:2px">
+        <button class="seg-btn active" data-filter="ALL" style="padding:4px 10px;border-radius:4px;border:0;background:var(--accent);color:#0b1220;font-weight:700;font-size:11px;cursor:pointer">All</button>
+        <button class="seg-btn" data-filter="B" style="padding:4px 10px;border-radius:4px;border:0;background:transparent;color:var(--text);font-weight:600;font-size:11px;cursor:pointer">Buys</button>
+        <button class="seg-btn" data-filter="S" style="padding:4px 10px;border-radius:4px;border:0;background:transparent;color:var(--text);font-weight:600;font-size:11px;cursor:pointer">Sells</button>
+      </div>
+      <span class="hint" id="tradeCount" style="color:var(--muted);font-size:11px"></span>
+      <span style="flex:1"></span>
+      <span class="hint" style="color:var(--muted);font-size:10px">Sorted oldest → newest</span>
+    </div>
+
+    <table class="exec-table" id="execTable">
+      <thead><tr>
+        <th style="text-align:left">Date</th>
+        <th>B/S</th><th>Qty</th><th>MWh</th>
+        <th>Trade $</th><th>Sep-26 that day</th>
+        <th>Exec %ile</th><th>Bucket</th>
+        <th>Current Mark</th><th>$/MWh P&amp;L</th><th>Total P&amp;L</th><th>Signal</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ============ TAB 6: SEASONAL PLAYBOOK ============ -->
+  <div class="tabpane" id="pane-season">
+    <div class="box" style="background:linear-gradient(135deg,#1a1010 0%,#0f0808 100%);border:2px solid #d4af37;padding:20px;margin-bottom:16px">
+      <div style="color:#d4af37;font-size:11px;letter-spacing:2px;font-weight:700;margin-bottom:6px">SEASONAL PLAYBOOK &mdash; AESO CAL CONTRACTS</div>
+      <div style="color:#eee;font-size:14px;line-height:1.5">
+        Rules ranked by <b>historical reliability</b>. Focus: what does the rest of <b>2026</b> and the <b>prompt CAL (CAL27)</b> do from here.
+        Data: 19&ndash;23 CAL contract-years (CAL27&ndash;CAL30, 2021&ndash;present) plus 5 years of FCP prompt-month prints.
+      </div>
+    </div>
+
+    <!-- RULE 1: FEB CRUSHES -->
+    <div class="box" style="border-left:6px solid #d43f3f;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <div><span style="color:#d43f3f;font-size:24px;font-weight:800">RULE 1</span> <span style="color:#eee;font-size:18px;font-weight:600">&mdash; SELL LATE JANUARY. FEBRUARY IS THE MOST RELIABLE SELLOFF IN THE DATA.</span></div>
+        <div style="background:#d43f3f;color:#fff;padding:4px 12px;border-radius:4px;font-weight:700">0 UP YEARS / 20</div>
+      </div>
+      <div style="color:#ddd;line-height:1.6;font-size:14px">
+        <b>February</b> has finished DOWN in every single one of 20 CAL contract-years. Mean <b>&minus;4.9%</b>, median <b>&minus;3.0%</b>, consistency score <b>0.94</b> (highest reliability in the dataset).
+        The 2 most recent years have been worst: <b>Feb-25 &minus;8.3%, Feb-26 &minus;7.4% to &minus;16.2%</b> across the CAL curve.
+        <br><br>
+        <b>Read for now:</b> If CAL27 (currently <b><span id="season-cal27-mark">&mdash;</span></b>) is still standing on Jan 31 2027, get short into February. Cover end of March.
+      </div>
+    </div>
+
+    <!-- RULE 2: MAY RALLIES -->
+    <div class="box" style="border-left:6px solid #3fbf5c;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <div><span style="color:#3fbf5c;font-size:24px;font-weight:800">RULE 2</span> <span style="color:#eee;font-size:18px;font-weight:600">&mdash; BUY END-OF-MARCH. MAY IS THE SINGLE BEST BULLISH MONTH.</span></div>
+        <div style="background:#3fbf5c;color:#0a0f0a;padding:4px 12px;border-radius:4px;font-weight:700">90% UP / 20 &middot; MEAN +4.3%</div>
+      </div>
+      <div style="color:#ddd;line-height:1.6;font-size:14px">
+        <b>May</b> is up in <b>90% of CAL contract-years (18 of 20)</b>. Mean <b>+4.3%</b>, median <b>+5.5%</b>, consistency <b>1.19</b> (highest positive-signal score).
+        The Apr-1 &rarr; Jun-30 backtest: <b>21 of 23 contract-years positive</b>. 2025 CAL30 alone was <b>+37.7%</b>. 2026 CAL30 (this year) was <b>+24.7%</b>.
+        <br><br>
+        <b>Read for now:</b> Circle Apr 1 2027 on the calendar. Reload CAL27 long. Take profit end of June 2027.
+      </div>
+    </div>
+
+    <!-- RULE 3: NOVEMBER PROMPT-MONTH BEAT -->
+    <div class="box" style="border-left:6px solid #3fbf5c;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <div><span style="color:#3fbf5c;font-size:24px;font-weight:800">RULE 3</span> <span style="color:#eee;font-size:18px;font-weight:600">&mdash; NOVEMBER DELIVERY BEATS ITS CONTRACT 80% OF THE TIME. STAY LONG NOV-26.</span></div>
+        <div style="background:#3fbf5c;color:#0a0f0a;padding:4px 12px;border-radius:4px;font-weight:700">4 OF 5 BEATS</div>
+      </div>
+      <div style="color:#ddd;line-height:1.6;font-size:14px">
+        Historical Nov prompt-month contract vs realized (from FCP):
+        Nov-21 <b>+$3.63</b>, Nov-22 <b>+$16.78</b>, Nov-23 &minus;$34.22, Nov-24 <b>+$20.10</b>, Nov-25 <b>+$7.24</b>.
+        <b>Mean +$2.71, median +$7.24, 80% beat rate</b>. Only 2023 missed and that was a mild winter capitulation.
+        <br><br>
+        <b>Read for now:</b> The Nov-26 contract deserves the benefit of the doubt vs the tape. Don't dump the length here.
+      </div>
+    </div>
+
+    <!-- RULE 4: MARCH BLEED -->
+    <div class="box" style="border-left:6px solid #d43f3f;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <div><span style="color:#d43f3f;font-size:24px;font-weight:800">RULE 4</span> <span style="color:#eee;font-size:18px;font-weight:600">&mdash; MARCH BLEEDS. HOLD THE SHORT INTO END OF Q1.</span></div>
+        <div style="background:#d43f3f;color:#fff;padding:4px 12px;border-radius:4px;font-weight:700">80% DOWN / 20 &middot; MEAN &minus;4.2%</div>
+      </div>
+      <div style="color:#ddd;line-height:1.6;font-size:14px">
+        <b>March</b> is down in <b>16 of 20 contract-years (80%)</b>. Mean <b>&minus;4.2%</b>, median <b>&minus;2.3%</b>, consistency <b>1.05</b>.
+        March 2024 was <b>&minus;6.3%</b> across all CALs. March 2025 was <b>&minus;9.9% to &minus;11.7%</b>.
+        <br><br>
+        <b>Read for now:</b> The Feb-Mar bleed is one continuous move, not two independent effects. Don't cover the Feb short early. Cover Mar 31.
+      </div>
+    </div>
+
+    <!-- RULE 5: DEC PROMPT DISAPPOINTS -->
+    <div class="box" style="border-left:6px solid #d43f3f;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <div><span style="color:#d43f3f;font-size:24px;font-weight:800">RULE 5</span> <span style="color:#eee;font-size:18px;font-weight:600">&mdash; DECEMBER DELIVERY UNDERPERFORMS ITS CONTRACT. FADE DEC-26 LATE-STRIP.</span></div>
+        <div style="background:#d43f3f;color:#fff;padding:4px 12px;border-radius:4px;font-weight:700">3 OF 5 MISSES &middot; LAST 3 IN A ROW</div>
+      </div>
+      <div style="color:#ddd;line-height:1.6;font-size:14px">
+        Historical Dec prompt-month contract vs realized: Dec-21 +$13.22, Dec-22 +$63.93,
+        <b>Dec-23 &minus;$83.40, Dec-24 &minus;$37.17, Dec-25 &minus;$29.65</b>.
+        Last <b>3 years in a row missed by huge margins</b>. Median across sample <b>&minus;$29.65</b>.
+        Dec CAL MoM is also the noisiest month (sd 6.0, 42% up rate).
+        <br><br>
+        <b>Read for now:</b> Dec-26 is currently <b><span id="season-dec-mark">&mdash;</span></b> on the strip. Historical base rate says it delivers cheaper than that. Trim length or take the short into December.
+      </div>
+    </div>
+
+    <!-- RULE 6: SEP OCT NOISE -->
+    <div class="box" style="border-left:6px solid #888;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <div><span style="color:#aaa;font-size:24px;font-weight:800">RULE 6</span> <span style="color:#eee;font-size:18px;font-weight:600">&mdash; SEP&ndash;OCT ARE NOISE. TRADE FUNDAMENTALS, NOT THE CALENDAR.</span></div>
+        <div style="background:#888;color:#fff;padding:4px 12px;border-radius:4px;font-weight:700">DRIFT &lt; 1.3% &middot; 50/50 DIRECTION</div>
+      </div>
+      <div style="color:#ddd;line-height:1.6;font-size:14px">
+        <b>Sep</b> mean +1.3%, up 58% of years. <b>Oct</b> mean +1.2%, up 53%. Both have median near zero.
+        For prompt-CAL specifically (n-2 to n-5), Sep is up <b>40%</b> and Oct is up <b>40%</b>. There is <b>no reliable Sep-Oct rally</b> to trade against.
+        The 2025 October pop (CAL28 +3.2%, CAL29 +4.3%, CAL30 +4.1%) was a winter-risk repricing, not a calendar effect.
+        <br><br>
+        <b>Read for now:</b> Ignore any &ldquo;traders rally the book in Oct&rdquo; folklore for the next 8 weeks. Trade the % of Range matrix and the tape. Aug-28 lows on CAL27 (<b><span id="season-cal27-mark2">&mdash;</span></b>) may or may not hold &mdash; history gives no edge either way.
+      </div>
+    </div>
+
+    <!-- CURRENT-YEAR REMAINDER SUMMARY -->
+    <div class="box" style="background:#0f1a20;border:2px solid #4ba3d1;padding:16px;margin-top:20px">
+      <div style="color:#4ba3d1;font-size:14px;letter-spacing:1.5px;font-weight:700;margin-bottom:10px">CURRENT YEAR REMAINDER (SEP&ndash;DEC 2026) &mdash; ACTION MAP</div>
+      <table style="width:100%;font-size:13px;color:#ddd">
+        <thead><tr style="color:#4ba3d1;border-bottom:1px solid #2a3a4a">
+          <th style="text-align:left;padding:6px">Contract</th>
+          <th style="text-align:right;padding:6px">Current Mark</th>
+          <th style="text-align:left;padding:6px">Seasonal Base Rate</th>
+          <th style="text-align:left;padding:6px">Action</th>
+        </tr></thead>
+        <tbody id="season-current-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- PROMPT CAL DETAIL -->
+    <div class="box" style="background:#0f1a20;border:2px solid #d4af37;padding:16px;margin-top:16px">
+      <div style="color:#d4af37;font-size:14px;letter-spacing:1.5px;font-weight:700;margin-bottom:10px">PROMPT CAL (CAL27) &mdash; FULL SEASONAL CALENDAR FROM HERE</div>
+      <table style="width:100%;font-size:13px;color:#ddd">
+        <thead><tr style="color:#d4af37;border-bottom:1px solid #4a3a10">
+          <th style="text-align:left;padding:6px">Month</th>
+          <th style="text-align:right;padding:6px">Mean MoM</th>
+          <th style="text-align:right;padding:6px">Median</th>
+          <th style="text-align:right;padding:6px">Up %</th>
+          <th style="text-align:left;padding:6px">Rank</th>
+          <th style="text-align:left;padding:6px">Bias for CAL27</th>
+        </tr></thead>
+        <tbody id="season-cal-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+</main>
+
+<div id="paste">
+  <div class="box">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px">
+      <strong>Paste today's PowerMarks settles</strong>
+      <button class="btn" id="closePaste">Close</button>
+    </div>
+    <div class="hint">Drop the daily PowerMarks XLSX or paste <code>contract\tprice</code> per line.</div>
+    <textarea id="pasteBox" placeholder="Sep-26	39.25&#10;CAL27	42.00"></textarea>
+    <div class="row" style="justify-content:flex-end;margin-top:10px;gap:8px">
+      <label class="hint">Trade date <input class="num" id="tradeDate" type="date" style="width:auto"/></label>
+      <button class="btn primary" id="applyPaste">Append to history</button>
+    </div>
+    <div class="hint" id="pasteMsg" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+let DATA = null;
+let EXEC = null;
+let REALIZED = null;
+let DAILY = null;
+let DAILY_LOOKBACK = 365;
+let dailyChart = null;
+let FCP = null;
+let fcpChart = null;
+let RESP = null;
+let PATHS = null;
+let BALMO_RESP = null;
+let balmoMiniChart = null;
+let balmoMoveChart = null;
+let projTermChart = null;
+let projMiniChart = null;
+let projMoveChart = null;
+let projPathChart = null;
+let PROJ_VIEW = 'terminal';
+let PROJ_PATH_K = 1;
+let LOOKBACK = 90;
+let MA_A = 10, MA_B = 30;
+let BAND = 15;
+let LOCAL_UPDATES = {};
+
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+function pct(arr, p){
+  if(!arr.length) return null;
+  const s = arr.slice().sort((a,b)=>a-b);
+  const idx = (p/100)*(s.length-1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo===hi) return s[lo];
+  return s[lo] + (s[hi]-s[lo])*(idx-lo);
+}
+function sma(series, n){
+  const out = new Array(series.length).fill(null);
+  let sum=0;
+  for(let i=0;i<series.length;i++){
+    sum += series[i].p;
+    if(i>=n) sum -= series[i-n].p;
+    if(i>=n-1) out[i] = sum/n;
+  }
+  return out;
+}
+function fmt(v){ return v==null?'—':('$'+v.toFixed(2)); }
+function q25(v){ return v==null?null : Math.round(v*4)/4; }
+function fmtQ(v){ return v==null?'—':('$'+q25(v).toFixed(2)); }
+function sliceLookback(series){
+  if(!LOOKBACK) return series;
+  return series.slice(-LOOKBACK);
+}
+
+async function loadAll(){
+  const [rD, rE, rR, rDy, rF, rRp, rPs, rBr] = await Promise.all([
+    fetch('data.json?ts='+Date.now()),
+    fetch('execution.json?ts='+Date.now()),
+    fetch('realized.json?ts='+Date.now()).catch(()=>null),
+    fetch('daily.json?ts='+Date.now()).catch(()=>null),
+    fetch('forward_curve_path.json?ts='+Date.now()).catch(()=>null),
+    fetch('curve_response.json?ts='+Date.now()).catch(()=>null),
+    fetch('path_stats.json?ts='+Date.now()).catch(()=>null),
+    fetch('balmo_response.json?ts='+Date.now()).catch(()=>null),
+  ]);
+  DATA = await rD.json();
+  EXEC = await rE.json();
+  try { REALIZED = rR ? await rR.json() : null; } catch(e){ REALIZED = null; }
+  try { DAILY = rDy ? await rDy.json() : null; } catch(e){ DAILY = null; }
+  try { FCP = rF ? await rF.json() : null; } catch(e){ FCP = null; }
+  try { RESP = rRp ? await rRp.json() : null; } catch(e){ RESP = null; }
+  try { PATHS = rPs ? await rPs.json() : null; } catch(e){ PATHS = null; }
+  try { BALMO_RESP = rBr ? await rBr.json() : RESP; } catch(e){ BALMO_RESP = RESP; }
+  overlayUpdates();
+  $('#meta').textContent = 'Latest settle: '+DATA.latest_trade_date+'   ·   '+
+    Object.keys(DATA.contracts).length+' contracts';
+  render();
+  try { renderExec(); } catch(e){ console.error('renderExec failed', e); }
+  try { renderRealized(); } catch(e){ console.error('renderRealized failed', e); }
+  try { renderDaily(); } catch(e){ console.error('renderDaily failed', e); }
+  try { renderFCP(); } catch(e){ console.error('renderFCP failed', e); }
+  try { initProjector(); } catch(e){ console.error('initProjector failed', e); }
+  try { initBalmo(); } catch(e){ console.error('initBalmo failed', e); }
+  try { renderSeasonalPlaybook(); } catch(e){ console.error('renderSeasonalPlaybook failed', e); }
+  try { renderAlertBanner(); } catch(e){ console.error('renderAlertBanner failed', e); }
+  try { wireTradeFilters(); } catch(e){ console.error('wireTradeFilters failed', e); }
+  const fv = $('#fundView');
+  if (fv) fv.addEventListener('input', renderExec);
+}
+
+function renderDaily(){
+  const mnt = $('#dailyCard');
+  if (!mnt || !DAILY){ if(mnt) mnt.style.display='none'; return; }
+  mnt.style.display = '';
+  const w = DAILY.windows;
+  const yrs = Object.keys(DAILY.years).sort();
+  const statRow = (label, s) => s ? `<tr>
+    <td class="lbl">${label}</td>
+    <td>${s.n}</td>
+    <td>$${s.avg.toFixed(2)}</td>
+    <td>$${s.median.toFixed(2)}</td>
+    <td>$${s.min.toFixed(2)}</td>
+    <td>$${s.max.toFixed(2)}</td>
+    <td>$${s.p5.toFixed(2)}</td>
+    <td>$${s.p95.toFixed(2)}</td>
+  </tr>` : '';
+
+  mnt.innerHTML = `
+    <h3>AESO 7\u00d724 \u2014 Daily Settle History
+      <span class="sub">Latest: <strong style="color:#f5c518">$${DAILY.last_settle.toFixed(2)}</strong> on ${DAILY.last_date} \u00b7 ${DAILY.series.length.toLocaleString()} days</span>
+      <span class="daily-lookback">
+        <button data-lb="90">3M</button>
+        <button data-lb="180">6M</button>
+        <button data-lb="365" class="active">1Y</button>
+        <button data-lb="1095">3Y</button>
+        <button data-lb="9999">All</button>
+      </span>
+    </h3>
+    <div class="daily-grid">
+      <div class="daily-chart-wrap"><canvas id="dailyChart"></canvas></div>
+      <div class="daily-stats"><table>
+        <thead><tr><th>Window</th><th>N</th><th>Avg</th><th>Med</th><th>Min</th><th>Max</th><th>P5</th><th>P95</th></tr></thead>
+        <tbody>
+          ${statRow('Last 30 days', w.l30d)}
+          ${statRow('Last 90 days', w.l90d)}
+          ${statRow('Last 180 days', w.l180d)}
+          ${statRow('Last 365 days', w.l365d)}
+          ${statRow('Last 3 years', w.l3y)}
+          ${statRow('Last 5 years', w.l5y)}
+          ${yrs.map(y => statRow(y, DAILY.years[y])).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+
+  drawDailyChart();
+  $$('.daily-lookback button').forEach(b => b.addEventListener('click', ()=>{
+    DAILY_LOOKBACK = parseInt(b.dataset.lb, 10);
+    $$('.daily-lookback button').forEach(x=>x.classList.toggle('active', x===b));
+    drawDailyChart();
+  }));
+}
+
+// ============ TAB 3: FORWARD CURVE PATH ============
+// Round to nearest $0.25
+function roundQ(v){ if(v==null||!isFinite(v)) return v; return Math.round(v*4)/4; }
+function fmtDollarQ(v){
+  if (v==null || !isFinite(v)) return '\u2014';
+  return '$'+roundQ(v).toFixed(2);
+}
+function fmtSignedDollarQ(v){
+  if (v==null || !isFinite(v)) return '\u2014';
+  const r = roundQ(v);
+  const s = r>=0?'+':'\u2212';
+  return s+'$'+Math.abs(r).toFixed(2);
+}
+function fmtSignedDollar(v){
+  if (v==null || !isFinite(v)) return '\u2014';
+  const s = v>=0?'+':'\u2212';
+  return s+'$'+Math.abs(v).toFixed(2);
+}
+function fmtSignedPct(v){
+  if (v==null || !isFinite(v)) return '\u2014';
+  const s = v>=0?'+':'\u2212';
+  return s+Math.abs(v).toFixed(1)+'%';
+}
+function monLabel(dm){
+  const parts = dm.split('-');
+  const y = parts[0].slice(2);
+  const mNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return mNames[parseInt(parts[1],10)-1]+'-'+y;
+}
+
+function renderFCP(){
+  if (!FCP) return;
+  const s = FCP.summary;
+
+  // Tiles
+  const tiles = [
+    { k:'Sample size', v: s.n+' months', sub: monLabel(s.first_month)+' \u2013 '+monLabel(s.last_month) },
+    { k:'Avg delta $/MWh', v: fmtSignedDollar(s.avg_delta), sub: 'Median '+fmtSignedDollar(s.median_delta), cls: s.avg_delta>0?'good':'bad' },
+    { k:'Avg delta %', v: fmtSignedPct(s.avg_delta_pct), sub: 'Realized vs contract', cls: s.avg_delta_pct>0?'good':'bad' },
+    { k:'Market underpriced', v: s.n_realized_over_contract+'/'+s.n+'  ('+s.hit_rate_over.toFixed(0)+'%)', sub: 'Realized > contract' },
+    { k:'Range', v: fmtSignedDollar(s.min_delta)+'  \u2192  '+fmtSignedDollar(s.max_delta), sub: 'Stdev '+fmtSignedDollar(s.stddev_delta).replace('+','') },
+    { k:'Bias', v: (s.avg_delta>0?'Under-priced':(s.avg_delta<0?'Over-priced':'Neutral')), sub: 'Realized '+(s.avg_delta>0?'>':(s.avg_delta<0?'<':'\u2248'))+' contract', cls: s.avg_delta>0?'good':(s.avg_delta<0?'bad':'') },
+  ];
+  $('#fcpTiles').innerHTML = tiles.map(t => `
+    <div class="tile ${t.cls||''}">
+      <div class="k">${t.k}</div>
+      <div class="v">${t.v}</div>
+      <div class="s">${t.sub}</div>
+    </div>`).join('');
+
+  // Seasonality table
+  $('#fcpSeasonTable').innerHTML = `
+    <thead><tr>
+      <th>Mo</th><th>N</th><th>Avg Contract</th><th>Avg Realized</th><th>Avg \u0394</th><th>Under %</th>
+    </tr></thead>
+    <tbody>
+      ${FCP.month_rows.map(r=>`<tr>
+        <td>${r.month}</td>
+        <td>${r.n}</td>
+        <td>$${r.avg_contract.toFixed(2)}</td>
+        <td>$${r.avg_realized.toFixed(2)}</td>
+        <td class="${r.avg_delta>0?'d-pos':(r.avg_delta<0?'d-neg':'')}">${fmtSignedDollar(r.avg_delta)}</td>
+        <td>${r.hit_rate_over.toFixed(0)}%</td>
+      </tr>`).join('')}
+    </tbody>`;
+
+  // Year table
+  $('#fcpYearTable').innerHTML = `
+    <thead><tr>
+      <th>Year</th><th>N</th><th>Avg Contract</th><th>Avg Realized</th><th>Avg \u0394</th><th>Over / Under</th>
+    </tr></thead>
+    <tbody>
+      ${FCP.year_rows.map(r=>`<tr>
+        <td>${r.year}</td>
+        <td>${r.n}</td>
+        <td>$${r.avg_contract.toFixed(2)}</td>
+        <td>$${r.avg_realized.toFixed(2)}</td>
+        <td class="${r.avg_delta>0?'d-pos':(r.avg_delta<0?'d-neg':'')}">${fmtSignedDollar(r.avg_delta)}</td>
+        <td>${r.n_over} / ${r.n_under}</td>
+      </tr>`).join('')}
+    </tbody>`;
+
+  // Monthly log table (oldest → newest, cap to last 60 months)
+  const rows = FCP.rows.slice(-60);
+  // Data-bar scaling: max abs delta across the visible window
+  const maxAbsDelta = Math.max(1, ...rows.map(r => Math.abs(r.delta)));
+  const tb = $('#fcpTable tbody');
+  tb.innerHTML = rows.map(r=>{
+    const cls = r.delta>0?'d-pos':(r.delta<0?'d-neg':'');
+    const pillCls = r.delta>1 ? 'pill-under' : r.delta<-1 ? 'pill-over' : 'pill-flat';
+    const pillLabel = r.delta>1 ? 'UNDER' : r.delta<-1 ? 'OVER' : 'FAIR';
+    const barPct = Math.min(50, (Math.abs(r.delta)/maxAbsDelta)*50);
+    const barCls = r.delta>=0 ? '' : 'neg';
+    const bar = `<td class="bar-cell ${cls}"><div class="bar-axis"></div><div class="bar-track ${barCls}" style="width:${barPct}%"></div><span class="bar-label">${fmtSignedDollarQ(r.delta)}</span></td>`;
+    return `<tr>
+      <td>${monLabel(r.delivery_month)}</td>
+      <td>${fmtDollarQ(r.contract_settle_10d_avg)}</td>
+      <td>${fmtDollarQ(r.realized_settle)}</td>
+      ${bar}
+      <td class="${cls}">${fmtSignedPct(r.delta_pct)}</td>
+      <td><span class="pill ${pillCls}">${pillLabel}</span></td>
+    </tr>`;
+  }).join('');
+
+  // Chart
+  drawFCPChart();
+}
+
+function drawFCPChart(){
+  const canvas = $('#fcpChart');
+  if (!canvas || !FCP) return;
+  if (fcpChart) fcpChart.destroy();
+  const labels = FCP.rows.map(r => r.delivery_month);
+  const deltas = FCP.rows.map(r => r.delta);
+  const colors = deltas.map(d => d >= 0 ? 'rgba(49,196,141,.75)' : 'rgba(239,68,68,.75)');
+  const borderColors = deltas.map(d => d >= 0 ? '#31c48d' : '#ef4444');
+  fcpChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Realized \u2212 Contract',
+        data: deltas,
+        backgroundColor: colors,
+        borderColor: borderColors,
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: items => monLabel(items[0].label),
+          label: c => 'Delta: ' + (c.parsed.y>=0?'+':'\u2212') + '$' + Math.abs(c.parsed.y).toFixed(2) + '/MWh',
+          afterLabel: c => {
+            const r = FCP.rows[c.dataIndex];
+            return ['Contract: $' + r.contract_settle_10d_avg.toFixed(2), 'Realized: $' + r.realized_settle.toFixed(2)];
+          }
+        }}
+      },
+      scales: {
+        x: { type: 'time', time: { unit: 'quarter', displayFormats: { quarter: 'Qq yyyy' } },
+             ticks: { color: '#8a97a8', font: { size: 9 } },
+             grid: { color: 'rgba(255,255,255,.04)' } },
+        y: { ticks: { color: '#8a97a8', font: { size: 9 }, callback: v => (v>=0?'+':'\u2212') + '$' + Math.abs(v) },
+             grid: { color: 'rgba(255,255,255,.05)' },
+             title: { display: true, text: 'Delta $/MWh', color: '#8a97a8', font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ============ TAB 3: PATH PROJECTOR ============
+function addMonthsISO(dm, k){
+  const y = parseInt(dm.slice(0,4),10), m = parseInt(dm.slice(5,7),10);
+  let m2 = m + k;
+  const y2 = y + Math.floor((m2-1)/12);
+  m2 = ((m2-1) % 12) + 1;
+  return String(y2).padStart(4,'0') + '-' + String(m2).padStart(2,'0');
+}
+
+function initProjector(){
+  if (!DATA || !RESP || !PATHS) return;
+  const sel = $('#projPromptMonth');
+  const kSel = $('#projPathK');
+  // Populate months from DATA.contracts
+  const contractKeys = Object.keys(DATA.contracts).sort();
+  sel.innerHTML = contractKeys.map(c => `<option value="${c}">${monLabel(c+'-01')}</option>`).join('');
+  // Default: first contract month AFTER today (i.e. real prompt = next month)
+  const today = new Date();
+  const curYm = today.getUTCFullYear()*12 + today.getUTCMonth();
+  const promptMonthKey = contractKeys.find(k => {
+    const [y,m] = k.split('-').map(Number);
+    return (y*12 + (m-1)) > curYm;
+  }) || contractKeys[0];
+  const defaultMonth = promptMonthKey;
+  sel.value = defaultMonth;
+  const currentStrip = (DATA.contracts[defaultMonth]||{}).current;
+  const stripQ = currentStrip != null ? roundQ(currentStrip) : null;
+  $('#projPromptStrip').value = stripQ != null ? stripQ.toFixed(2) : '';
+  $('#projView').value = stripQ != null ? stripQ.toFixed(2) : '';
+
+  // K selector for path view (1..12)
+  kSel.innerHTML = '';
+  for (let k=1;k<=12;k++){
+    const promptDm = sel.value;
+    const fwdDm = addMonthsISO(promptDm, k);
+    const opt = document.createElement('option');
+    opt.value = k;
+    opt.textContent = `k=${k} → ${monLabel(fwdDm+'-01')}`;
+    kSel.appendChild(opt);
+  }
+  kSel.value = PROJ_PATH_K;
+
+  // Wire events
+  sel.addEventListener('change', ()=>{
+    const c = DATA.contracts[sel.value];
+    if (c && c.current != null) {
+      const q = roundQ(c.current);
+      $('#projPromptStrip').value = q.toFixed(2);
+      $('#projView').value = q.toFixed(2);
+    }
+    rebuildKSelector();
+    renderProjector();
+  });
+  $('#projPromptStrip').addEventListener('input', renderProjector);
+  $('#projView').addEventListener('input', renderProjector);
+  kSel.addEventListener('change', ()=>{ PROJ_PATH_K = parseInt(kSel.value,10); renderProjector(); });
+
+  $$('.proj-tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      $$('.proj-tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      PROJ_VIEW = t.dataset.view;
+      $('#projTerminalView').style.display = PROJ_VIEW==='terminal' ? '' : 'none';
+      $('#projPathView').style.display = PROJ_VIEW==='path' ? '' : 'none';
+      renderProjector();
+    });
+  });
+
+  function rebuildKSelector(){
+    kSel.innerHTML = '';
+    for (let k=1;k<=12;k++){
+      const promptDm = sel.value;
+      const fwdDm = addMonthsISO(promptDm, k);
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = `k=${k} → ${monLabel(fwdDm+'-01')}`;
+      kSel.appendChild(opt);
+    }
+    kSel.value = PROJ_PATH_K;
+  }
+
+  renderProjector();
+}
+
+function getBeta(k){
+  if (!RESP) return null;
+  const r = RESP.k_stats.find(x=>x.k===k);
+  return r ? r : null;
+}
+
+function renderProjector(){
+  if (!DATA || !RESP || !PATHS) return;
+  const promptDm = $('#projPromptMonth').value;
+  const strip = parseFloat($('#projPromptStrip').value);
+  const view = parseFloat($('#projView').value);
+  if (!isFinite(strip) || !isFinite(view)) return;
+  const surprise = view - strip;
+
+  const sEl = $('#projSurpriseOut');
+  sEl.textContent = fmtSignedDollarQ(surprise)+'/MWh';
+  sEl.style.color = surprise>0 ? '#31c48d' : (surprise<0 ? '#ef4444' : '#f5c56b');
+  const k1 = getBeta(1);
+  const promptMove = k1 ? k1.beta * surprise : 0;
+  const pEl = $('#projPromptMoveOut');
+  pEl.textContent = fmtSignedDollarQ(promptMove)+'/MWh';
+  pEl.style.color = promptMove>0 ? '#31c48d' : (promptMove<0 ? '#ef4444' : '#f5c56b');
+
+  // Build projection table + chart data for all 12 fwd months
+  const rows = [];
+  for (let k=1;k<=12;k++){
+    const fwdDm = addMonthsISO(promptDm, k);
+    const c = DATA.contracts[fwdDm];
+    const currentFwd = c ? c.current : null;
+    const s = getBeta(k);
+    if (!s || currentFwd == null) { rows.push({ k, fwdDm, currentFwd, absent:true }); continue; }
+    const endMove = s.beta * surprise;
+    // Terminal band: use the RELATIVE path distribution end-point spread as multiplier
+    // The relative path at bucket 20 is always 1.0 (that's the normalization). So we need spread of |end-move| across events.
+    // We approximate the terminal band by scaling: use k_dist[k].all (raw $) end-of-month percentiles as unconditional spread,
+    // then shift by (projected end-move - historical median).
+    const kd = PATHS.k_dist[k];
+    const allBand = kd && kd.all ? kd.all : null;
+    let p25=null,p75=null,p05=null,p95=null,p50=null;
+    if (allBand){
+      // Recentre around projected endMove: use historical spread (p25/p75/p05/p95) - p50 as delta, then add to endMove
+      const B = 20; // last bucket
+      const histMed = allBand.p50[B];
+      p50 = endMove;
+      p25 = endMove + (allBand.p25[B] - histMed);
+      p75 = endMove + (allBand.p75[B] - histMed);
+      p05 = endMove + (allBand.p05[B] - histMed);
+      p95 = endMove + (allBand.p95[B] - histMed);
+    }
+    rows.push({
+      k, fwdDm, currentFwd,
+      beta: s.beta,
+      endMove,
+      endPrice: currentFwd + endMove,
+      p25: p25!=null ? currentFwd+p25 : null,
+      p75: p75!=null ? currentFwd+p75 : null,
+      p05: p05!=null ? currentFwd+p05 : null,
+      p95: p95!=null ? currentFwd+p95 : null,
+    });
+  }
+
+  drawProjMini(rows);
+  drawProjMoveBar(rows);
+  drawProjTerminalTable(rows);
+  drawProjTip(rows, surprise);
+
+  if (PROJ_VIEW==='path') drawProjPath(promptDm, surprise);
+}
+
+// Chart.js plugin: draw price labels above the Current-strip line points
+const projCurveLabels = {
+  id: 'projCurveLabels',
+  afterDatasetsDraw(chart){
+    const { ctx } = chart;
+    // find datasets by label
+    const dsList = chart.data.datasets;
+    const curIdx = dsList.findIndex(d => d.label === 'Current');
+    const newIdx = dsList.findIndex(d => d.label === 'New market');
+    if (curIdx < 0 || newIdx < 0) return;
+    const curMeta = chart.getDatasetMeta(curIdx);
+    const newMeta = chart.getDatasetMeta(newIdx);
+    ctx.save();
+    ctx.font = '600 9px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    curMeta.data.forEach((pt, i) => {
+      const curV = dsList[curIdx].data[i];
+      const newV = dsList[newIdx].data[i];
+      if (curV == null) return;
+      // Grey label above current point (or below if new is higher and close)
+      const above = newV == null || newV >= curV;
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText(fmtDollarQ(curV), pt.x, above ? pt.y - 6 : pt.y + 12);
+    });
+    // Red label above/below new market when different from current
+    newMeta.data.forEach((pt, i) => {
+      const curV = dsList[curIdx].data[i];
+      const newV = dsList[newIdx].data[i];
+      if (newV == null) return;
+      if (curV != null && Math.abs(newV - curV) < 0.13) return; // overlap: hide
+      const above = curV == null || newV > curV;
+      ctx.fillStyle = newV >= (curV||newV) ? '#31c48d' : '#ef4444';
+      ctx.fillText(fmtDollarQ(newV), pt.x, above ? pt.y - 6 : pt.y + 12);
+    });
+    ctx.restore();
+  }
+};
+
+function drawProjMini(rows){
+  const canvas = $('#projMiniChart');
+  if (!canvas) return;
+  if (projMiniChart) projMiniChart.destroy();
+  const active = rows.filter(r => !r.absent);
+  const labels = active.map(r => monLabel(r.fwdDm+'-01'));
+  const current = active.map(r => roundQ(r.currentFwd));
+  const newMkt = active.map(r => roundQ(r.endPrice));
+  const p25 = active.map(r => r.p25!=null ? roundQ(r.p25) : null);
+  const p75 = active.map(r => r.p75!=null ? roundQ(r.p75) : null);
+
+  projMiniChart = new Chart(canvas.getContext('2d'), {
+    data: {
+      labels,
+      datasets: [
+        // P25-P75 band (red, translucent)
+        { type:'line', label:'P75', data:p75, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(239,68,68,.18)', fill:'+1', order:5 },
+        { type:'line', label:'P25', data:p25, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(239,68,68,.18)', fill:false, order:5 },
+        // Current strip (grey dashed)
+        { type:'line', label:'Current', data:current, borderColor:'#94a3b8', backgroundColor:'#94a3b8', borderWidth:1.8, borderDash:[4,3], pointRadius:2.5, pointHoverRadius:4, tension:0.25, order:2 },
+        // New market (red)
+        { type:'line', label:'New market', data:newMkt, borderColor:'#ef4444', backgroundColor:'#ef4444', borderWidth:2.4, pointRadius:3, pointHoverRadius:5, tension:0.25, order:1 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{ duration:200 },
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          label: c => c.dataset.label + ': ' + fmtDollarQ(c.parsed.y),
+          filter: item => !['P25','P75'].includes(item.dataset.label) || item.parsed.y != null
+        }}
+      },
+      scales:{
+        x:{ ticks:{ color:'#8a97a8', font:{ size:9 } }, grid:{ color:'rgba(255,255,255,.03)' } },
+        y:{ ticks:{ color:'#8a97a8', font:{ size:9 }, callback:v=>'$'+v }, grid:{ color:'rgba(255,255,255,.04)' }, grace:'12%' }
+      },
+      layout:{ padding:{ top:14, bottom:6 } }
+    },
+    plugins:[projCurveLabels]
+  });
+}
+
+// Chart.js plugin: draw "move" text above each bar and "new price" label centered on the bar
+const projMoveLabels = {
+  id: 'projMoveLabels',
+  afterDatasetsDraw(chart){
+    const { ctx, chartArea, scales } = chart;
+    const ds = chart.data.datasets[0];
+    if (!ds) return;
+    const meta = chart.getDatasetMeta(0);
+    ctx.save();
+    ctx.font = '600 9px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    meta.data.forEach((bar, i) => {
+      const raw = ds.data[i];
+      const info = ds._labelInfo ? ds._labelInfo[i] : null;
+      if (raw == null || !info) return;
+      const { x, y } = bar.tooltipPosition();
+      const zeroY = scales.y.getPixelForValue(0);
+      const isPos = raw >= 0;
+      // "Move" text above the tip of the bar
+      const moveText = info.moveText;
+      const priceText = info.priceText;
+      const tipY = y;
+      const tipTextY = isPos ? Math.max(chartArea.top + 8, tipY - 4) : Math.min(chartArea.bottom - 4, tipY + 10);
+      ctx.fillStyle = isPos ? '#31c48d' : '#ef4444';
+      ctx.fillText(moveText, x, tipTextY);
+      // "New price" text centered on the bar body
+      const bodyY = (tipY + zeroY) / 2 + 3;
+      ctx.fillStyle = '#fff';
+      ctx.fillText(priceText, x, bodyY);
+    });
+    ctx.restore();
+  }
+};
+
+function drawProjMoveBar(rows){
+  const canvas = $('#projMoveChart');
+  if (!canvas) return;
+  if (projMoveChart) projMoveChart.destroy();
+  const active = rows.filter(r => !r.absent);
+  const labels = active.map(r => monLabel(r.fwdDm+'-01'));
+  const moves = active.map(r => roundQ(r.endMove));
+  const newPrices = active.map(r => roundQ(r.endPrice));
+  const bg = moves.map(v => v >= 0 ? 'rgba(49,196,141,.55)' : 'rgba(239,68,68,.55)');
+  const border = moves.map(v => v >= 0 ? '#31c48d' : '#ef4444');
+  const labelInfo = active.map((r,i) => ({
+    moveText: fmtSignedDollarQ(moves[i]),
+    priceText: fmtDollarQ(newPrices[i])
+  }));
+
+  const ds = {
+    label: 'Expected $ move',
+    data: moves,
+    backgroundColor: bg,
+    borderColor: border,
+    borderWidth: 1.5,
+    borderRadius: 2,
+    _labelInfo: labelInfo
+  };
+
+  // Pad y-axis so the "move" text has room above the tallest bar
+  const maxAbs = Math.max(0.5, ...moves.map(Math.abs));
+  const yMax = Math.ceil(maxAbs * 1.25);
+
+  projMoveChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [ds] },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{ duration:200 },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          label: c => 'Move: ' + fmtSignedDollarQ(c.parsed.y) + ' \u2192 ' + fmtDollarQ(newPrices[c.dataIndex])
+        }}
+      },
+      scales:{
+        x:{ ticks:{ color:'#8a97a8', font:{ size:9 } }, grid:{ color:'rgba(255,255,255,.03)' } },
+        y:{ min:-yMax, max:yMax, ticks:{ color:'#8a97a8', font:{ size:9 }, callback:v=>(v>=0?'+':'\u2212')+'$'+Math.abs(v) }, grid:{ color:'rgba(255,255,255,.04)' } }
+      }
+    },
+    plugins:[projMoveLabels]
+  });
+}
+
+// Best-term-to-trade callout
+function drawProjTip(rows, surprise){
+  const el = $('#projTip');
+  if (!el) return;
+  const active = rows.filter(r => !r.absent);
+  if (active.length === 0){ el.textContent = '\u2014'; return; }
+
+  // Rank current strip levels by percentile of the 12-month current curve
+  const cur = active.map(r => r.currentFwd);
+  const min = Math.min(...cur), max = Math.max(...cur);
+  const span = Math.max(1e-6, max - min);
+  const pct = active.map(r => (r.currentFwd - min) / span); // 0=cheapest, 1=richest
+
+  // Buy candidate: cheapest current strip that also has a positive projected move (β * surprise > 0)
+  // Sell candidate: richest current strip with negative projected move
+  const cheapestIdx = pct.indexOf(Math.min(...pct));
+  const richestIdx  = pct.indexOf(Math.max(...pct));
+
+  const cheapest = active[cheapestIdx];
+  const richest  = active[richestIdx];
+
+  const cheapPct = (pct[cheapestIdx]*100).toFixed(0);
+  const richPct  = (pct[richestIdx]*100).toFixed(0);
+
+  let bias = '';
+  if (surprise > 0.1) bias = 'bullish';
+  else if (surprise < -0.1) bias = 'bearish';
+  else bias = 'flat';
+
+  const pctLbl = (r,i) => `${monLabel(r.fwdDm+'-01')} <b>${fmtDollarQ(r.currentFwd)}</b> (${(pct[i]*100).toFixed(0)}% of 12M range)`;
+
+  let html = '';
+  if (bias === 'flat'){
+    html = `Cheapest month on the curve: ${pctLbl(cheapest, cheapestIdx)} · Richest: ${pctLbl(richest, richestIdx)}. Set a view above/below the current strip to see recommended trades.`;
+  } else if (bias === 'bullish'){
+    // Buy the cheapest month (best carry into an up-move), sell nothing
+    const moveTxt = fmtSignedDollarQ(cheapest.endMove);
+    const newTxt  = fmtDollarQ(cheapest.endPrice);
+    html = `<span class="up">BULLISH view</span> → best <b>BUY</b>: <b>${monLabel(cheapest.fwdDm+'-01')}</b> at <b>${fmtDollarQ(cheapest.currentFwd)}</b> (${cheapPct}% of 12M range — cheapest month on the strip). Projected new price <b>${newTxt}</b> (<span class="up">${moveTxt}</span>). ` +
+           `Best <b>SELL</b> hedge: <b>${monLabel(richest.fwdDm+'-01')}</b> at <b>${fmtDollarQ(richest.currentFwd)}</b> (${richPct}% of range — richest, least upside).`;
+  } else {
+    const moveTxt = fmtSignedDollarQ(richest.endMove);
+    const newTxt  = fmtDollarQ(richest.endPrice);
+    html = `<span class="dn">BEARISH view</span> → best <b>SELL</b>: <b>${monLabel(richest.fwdDm+'-01')}</b> at <b>${fmtDollarQ(richest.currentFwd)}</b> (${richPct}% of 12M range — richest month on the strip). Projected new price <b>${newTxt}</b> (<span class="dn">${moveTxt}</span>). ` +
+           `Best <b>BUY</b> hedge: <b>${monLabel(cheapest.fwdDm+'-01')}</b> at <b>${fmtDollarQ(cheapest.currentFwd)}</b> (${cheapPct}% of range — cheapest, least downside).`;
+  }
+  el.innerHTML = html;
+}
+
+function drawProjTerminalTable(rows){
+  const tb = $('#projTerminalTable tbody');
+  // Data-bar scale for expected end-move across k=1..12
+  const activeMoves = rows.filter(r=>!r.absent).map(r=>Math.abs(r.endMove));
+  const maxAbsMove = Math.max(0.01, ...activeMoves);
+  tb.innerHTML = rows.map(r=>{
+    if (r.absent) return `<tr><td>${monLabel(r.fwdDm+'-01')}</td><td>${r.k}</td><td colspan="8" style="color:var(--muted)">no strip data</td></tr>`;
+    const mvCls = r.endMove>0?'d-pos':(r.endMove<0?'d-neg':'');
+    const barPct = Math.min(50, (Math.abs(r.endMove)/maxAbsMove)*50);
+    const barCls = r.endMove>=0 ? '' : 'neg';
+    const moveBar = `<td class="bar-cell ${mvCls}"><div class="bar-axis"></div><div class="bar-track ${barCls}" style="width:${barPct}%"></div><span class="bar-label">${fmtSignedDollarQ(r.endMove)}</span></td>`;
+    return `<tr>
+      <td>${monLabel(r.fwdDm+'-01')}</td>
+      <td>${r.k}</td>
+      <td>${fmtDollarQ(r.currentFwd)}</td>
+      <td>${r.beta>=0?'+':'\u2212'}${Math.abs(r.beta).toFixed(3)}</td>
+      ${moveBar}
+      <td style="color:#f5c56b;font-weight:700">${fmtDollarQ(r.endPrice)}</td>
+      <td>${fmtDollarQ(r.p25)}</td>
+      <td>${fmtDollarQ(r.p75)}</td>
+      <td style="color:var(--muted)">${fmtDollarQ(r.p05)}</td>
+      <td style="color:var(--muted)">${fmtDollarQ(r.p95)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function drawProjPath(promptDm, surprise){
+  const k = PROJ_PATH_K;
+  const canvas = $('#projPathChart');
+  if (!canvas) return;
+  if (projPathChart) projPathChart.destroy();
+  const fwdDm = addMonthsISO(promptDm, k);
+  const c = DATA.contracts[fwdDm];
+  if (!c || c.current==null){ $('#projPathMeta').textContent = 'No strip data for '+monLabel(fwdDm+'-01'); return; }
+  const currentFwd = c.current;
+  const s = getBeta(k);
+  const kd = PATHS.k_dist[k];
+  if (!s || !kd || !kd.all){ $('#projPathMeta').textContent = 'No path data'; return; }
+
+  const endMove = s.beta * surprise;
+  const buckets = PATHS.buckets;
+  const allBand = kd.all;
+  const B = 20;
+  const histMed = allBand.p50[B];
+
+  // Build percentile path (in $ moves-from-start), recentring histogram around projected endMove
+  const shift = endMove - histMed;
+  const p50 = allBand.p50.map(v => v + shift);
+  const p25 = allBand.p25.map(v => v + shift);
+  const p75 = allBand.p75.map(v => v + shift);
+  const p05 = allBand.p05.map(v => v + shift);
+  const p95 = allBand.p95.map(v => v + shift);
+
+  // Prices
+  const pP50 = p50.map(v => currentFwd + v);
+  const pP25 = p25.map(v => currentFwd + v);
+  const pP75 = p75.map(v => currentFwd + v);
+  const pP05 = p05.map(v => currentFwd + v);
+  const pP95 = p95.map(v => currentFwd + v);
+
+  const labels = buckets.map(b => (b*100).toFixed(0)+'%');
+  const startFlat = buckets.map(_=> currentFwd);
+
+  $('#projPathMeta').textContent = `Forward ${monLabel(fwdDm+'-01')} · current ${fmtDollarQ(currentFwd)} · β=${s.beta.toFixed(3)} · expected end ${fmtDollarQ(currentFwd+endMove)} (${fmtSignedDollarQ(endMove)})`;
+
+  projPathChart = new Chart(canvas.getContext('2d'), {
+    data: {
+      labels,
+      datasets: [
+        { type:'line', label:'P95', data:pP95, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(56,182,255,.08)', fill:'+1', order:5 },
+        { type:'line', label:'P05', data:pP05, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(56,182,255,.08)', fill:false, order:5 },
+        { type:'line', label:'P75', data:pP75, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(56,182,255,.18)', fill:'+1', order:4 },
+        { type:'line', label:'P25', data:pP25, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(56,182,255,.18)', fill:false, order:4 },
+        { type:'line', label:'Current strip', data:startFlat, borderColor:'#94a3b8', backgroundColor:'#94a3b8', borderWidth:1.5, borderDash:[4,3], pointRadius:0, tension:0, order:3 },
+        { type:'line', label:'P50 (expected path)', data:pP50, borderColor:'#f5c56b', backgroundColor:'#f5c56b', borderWidth:2.5, pointRadius:3, tension:0.25, order:1 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ labels:{ color:'#cfd8e6', font:{ size:10 }, filter: item => !['P05','P95'].includes(item.text) } },
+        tooltip:{ callbacks:{
+          label: c => c.dataset.label + ': $' + (c.parsed.y!=null ? c.parsed.y.toFixed(2) : '\u2014')
+        }}
+      },
+      scales:{
+        x:{ ticks:{ color:'#8a97a8', font:{ size:10 } }, grid:{ color:'rgba(255,255,255,.04)' }, title:{ display:true, text:'Progress through prompt month', color:'#8a97a8', font:{ size:10 } } },
+        y:{ ticks:{ color:'#8a97a8', font:{ size:10 }, callback:v=>'$'+v.toFixed(0) }, grid:{ color:'rgba(255,255,255,.05)' }, title:{ display:true, text:`${monLabel(fwdDm+'-01')} strip $/MWh`, color:'#8a97a8', font:{ size:10 } } }
+      }
+    }
+  });
+
+  // Table (show 6 checkpoints: 0%, 20%, 40%, 60%, 80%, 100%)
+  const tb = $('#projPathTable tbody');
+  const idx = [0, 4, 8, 12, 16, 20];
+  tb.innerHTML = idx.map(i => `<tr>
+    <td>${(buckets[i]*100).toFixed(0)}%</td>
+    <td style="color:var(--muted)">${fmtDollarQ(pP05[i])}</td>
+    <td>${fmtDollarQ(pP25[i])}</td>
+    <td style="color:#f5c56b;font-weight:700">${fmtDollarQ(pP50[i])}</td>
+    <td>${fmtDollarQ(pP75[i])}</td>
+    <td style="color:var(--muted)">${fmtDollarQ(pP95[i])}</td>
+  </tr>`).join('');
+}
+
+// ============ TAB 5: BALMO PATH ============
+// The current-month anchor: baseline = 10D pre-month strip mark.
+// Surprise = (view actual settle) - baseline.
+// k=1..12 forward months of the CURRENT month, using the same betas.
+function computeBaselineFromDaily(curDm){
+  // curDm = 'YYYY-MM' -> first day of month
+  const [y,m] = curDm.split('-').map(Number);
+  const firstOfMonth = new Date(Date.UTC(y, m-1, 1));
+  if (!DAILY || !DAILY.series) return null;
+  // We don't have historical FORWARD strip prints for the current-month contract
+  // in this project. Best proxy: use FCP.rows contract_settle_10d_avg for that month.
+  if (FCP && FCP.rows){
+    const iso = curDm+'-01';
+    const r = FCP.rows.find(x => x.delivery_month === iso);
+    if (r && r.contract_settle_10d_avg != null) return r.contract_settle_10d_avg;
+  }
+  return null;
+}
+
+function computeMTDFromDaily(curDm){
+  if (!DAILY || !DAILY.series) return null;
+  const rows = DAILY.series.filter(r => r.d && r.d.slice(0,7) === curDm);
+  if (rows.length === 0) return null;
+  const sum = rows.reduce((a,r)=>a+(r.p||0), 0);
+  return { avg: sum / rows.length, n: rows.length };
+}
+
+function initBalmo(){
+  if (!DATA || !BALMO_RESP) return;
+  const sel = $('#balmoCurMonth');
+
+  // Populate with recent months (current + past 6 as options; user can pick historical
+  // to sanity-check). Default = current calendar month if we have daily data for it,
+  // otherwise the most recent month with any daily prints.
+  const today = new Date();
+  const curYm = today.getUTCFullYear()*4 + Math.floor(today.getUTCMonth()); // dummy
+  // Build option list: months from FCP that have a contract baseline, then also
+  // the *current* calendar month even if no FCP row yet (for the live case).
+  const opts = [];
+  const curCal = today.getUTCFullYear()+'-'+String(today.getUTCMonth()+1).padStart(2,'0');
+  // Look back up to 24 months from FCP
+  if (FCP && FCP.rows){
+    const recent = FCP.rows.slice(-18).map(r => r.delivery_month.slice(0,7));
+    recent.forEach(m => { if (!opts.includes(m)) opts.push(m); });
+  }
+  if (!opts.includes(curCal)) opts.push(curCal);
+  opts.sort();
+  sel.innerHTML = opts.map(m => `<option value="${m}">${monLabel(m+'-01')}</option>`).join('');
+
+  // Default: current calendar month if daily data exists for it, else last FCP month
+  const mtd = computeMTDFromDaily(curCal);
+  const defaultMonth = (mtd && mtd.n > 0) ? curCal : opts[opts.length-1];
+  sel.value = defaultMonth;
+
+  // Wire events
+  sel.addEventListener('change', ()=>{
+    populateBalmoInputs();
+    renderBalmo();
+  });
+  $('#balmoBaseline').addEventListener('input', renderBalmo);
+  $('#balmoView').addEventListener('input', renderBalmo);
+
+  populateBalmoInputs();
+  renderBalmo();
+}
+
+function populateBalmoInputs(){
+  const curDm = $('#balmoCurMonth').value;
+  const baseline = computeBaselineFromDaily(curDm);
+  const mtd = computeMTDFromDaily(curDm);
+  $('#balmoCurName').textContent = monLabel(curDm+'-01');
+  if (baseline != null) $('#balmoBaseline').value = roundQ(baseline).toFixed(2);
+  else $('#balmoBaseline').value = '';
+  if (mtd) {
+    $('#balmoMTD').textContent = '$'+roundQ(mtd.avg).toFixed(2) + ' ('+mtd.n+'d)';
+  } else {
+    $('#balmoMTD').textContent = 'n/a';
+  }
+  // Default view = MTD if available, otherwise baseline
+  const defView = (mtd && mtd.avg != null) ? mtd.avg : baseline;
+  if (defView != null) $('#balmoView').value = roundQ(defView).toFixed(2);
+}
+
+function getBalmoBeta(k){
+  if (!BALMO_RESP) return null;
+  const r = BALMO_RESP.k_stats.find(x=>x.k===k);
+  return r ? r : null;
+}
+
+function renderBalmo(){
+  if (!DATA || !BALMO_RESP) return;
+  const curDm = $('#balmoCurMonth').value;
+  const baseline = parseFloat($('#balmoBaseline').value);
+  const view = parseFloat($('#balmoView').value);
+  if (!isFinite(baseline) || !isFinite(view)) return;
+  const surprise = view - baseline;
+
+  const sEl = $('#balmoSurpriseOut');
+  sEl.textContent = fmtSignedDollarQ(surprise)+'/MWh';
+  sEl.style.color = surprise>0 ? '#31c48d' : (surprise<0 ? '#ef4444' : '#f5c56b');
+
+  const k1 = getBalmoBeta(1);
+  const nextMove = k1 ? k1.beta * surprise : 0;
+  const nEl = $('#balmoNextMoveOut');
+  nEl.textContent = fmtSignedDollarQ(nextMove)+'/MWh';
+  nEl.style.color = nextMove>0 ? '#31c48d' : (nextMove<0 ? '#ef4444' : '#f5c56b');
+
+  // Build rows for k=1..12 forwards of curDm
+  const rows = [];
+  for (let k=1;k<=12;k++){
+    const fwdDm = addMonthsISO(curDm, k);
+    const c = DATA.contracts[fwdDm];
+    const currentFwd = c ? c.current : null;
+    const s = getBalmoBeta(k);
+    if (!s || currentFwd == null){ rows.push({ k, fwdDm, currentFwd, absent:true }); continue; }
+    const endMove = s.beta * surprise;
+    // P25/P75 band from historical spread
+    const kd = (PATHS && PATHS.k_dist) ? PATHS.k_dist[k] : null;
+    let p25=null,p75=null;
+    if (kd && kd.all){
+      const B = 20, histMed = kd.all.p50[B];
+      p25 = endMove + (kd.all.p25[B] - histMed);
+      p75 = endMove + (kd.all.p75[B] - histMed);
+    }
+    const newFair = currentFwd + endMove;
+    const misprice = newFair - currentFwd;
+    rows.push({
+      k, fwdDm, currentFwd, beta: s.beta,
+      endMove, endPrice: newFair, misprice,
+      p25: p25!=null ? currentFwd+p25 : null,
+      p75: p75!=null ? currentFwd+p75 : null
+    });
+  }
+
+  drawBalmoMini(rows);
+  drawBalmoMoveBar(rows);
+  drawBalmoTerminalTable(rows);
+  drawBalmoTip(rows, surprise);
+}
+
+function drawBalmoMini(rows){
+  const canvas = $('#balmoMiniChart');
+  if (!canvas) return;
+  if (balmoMiniChart) balmoMiniChart.destroy();
+  const active = rows.filter(r=>!r.absent);
+  const labels = active.map(r => monLabel(r.fwdDm+'-01'));
+  const current = active.map(r => roundQ(r.currentFwd));
+  const newMkt = active.map(r => roundQ(r.endPrice));
+  const p25 = active.map(r => r.p25!=null ? roundQ(r.p25) : null);
+  const p75 = active.map(r => r.p75!=null ? roundQ(r.p75) : null);
+
+  balmoMiniChart = new Chart(canvas.getContext('2d'), {
+    data: {
+      labels,
+      datasets: [
+        { type:'line', label:'P75', data:p75, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(239,68,68,.18)', fill:'+1', order:5 },
+        { type:'line', label:'P25', data:p25, borderColor:'transparent', pointRadius:0, backgroundColor:'rgba(239,68,68,.18)', fill:false, order:5 },
+        { type:'line', label:'Current', data:current, borderColor:'#94a3b8', backgroundColor:'#94a3b8', borderWidth:1.8, borderDash:[4,3], pointRadius:2.5, pointHoverRadius:4, tension:0.25, order:2 },
+        { type:'line', label:'New market', data:newMkt, borderColor:'#ef4444', backgroundColor:'#ef4444', borderWidth:2.4, pointRadius:3, pointHoverRadius:5, tension:0.25, order:1 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{ duration:200 },
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          label: c => c.dataset.label + ': ' + fmtDollarQ(c.parsed.y),
+          filter: item => !['P25','P75'].includes(item.dataset.label) || item.parsed.y != null
+        }}
+      },
+      scales:{
+        x:{ ticks:{ color:'#8a97a8', font:{ size:9 } }, grid:{ color:'rgba(255,255,255,.03)' } },
+        y:{ ticks:{ color:'#8a97a8', font:{ size:9 }, callback:v=>'$'+v }, grid:{ color:'rgba(255,255,255,.04)' }, grace:'12%' }
+      },
+      layout:{ padding:{ top:14, bottom:6 } }
+    },
+    plugins:[projCurveLabels]
+  });
+}
+
+function drawBalmoMoveBar(rows){
+  const canvas = $('#balmoMoveChart');
+  if (!canvas) return;
+  if (balmoMoveChart) balmoMoveChart.destroy();
+  const active = rows.filter(r=>!r.absent);
+  const labels = active.map(r => monLabel(r.fwdDm+'-01'));
+  const moves = active.map(r => roundQ(r.endMove));
+  const newPrices = active.map(r => roundQ(r.endPrice));
+  const bg = moves.map(v => v >= 0 ? 'rgba(49,196,141,.55)' : 'rgba(239,68,68,.55)');
+  const border = moves.map(v => v >= 0 ? '#31c48d' : '#ef4444');
+  const labelInfo = active.map((r,i) => ({
+    moveText: fmtSignedDollarQ(moves[i]),
+    priceText: fmtDollarQ(newPrices[i])
+  }));
+  const ds = { label: 'Expected $ move', data: moves, backgroundColor: bg, borderColor: border, borderWidth: 1.5, borderRadius: 2, _labelInfo: labelInfo };
+  const maxAbs = Math.max(0.5, ...moves.map(Math.abs));
+  const yMax = Math.ceil(maxAbs * 1.25);
+  balmoMoveChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [ds] },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:{ duration:200 },
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          label: c => 'Move: ' + fmtSignedDollarQ(c.parsed.y) + ' \u2192 ' + fmtDollarQ(newPrices[c.dataIndex])
+        }}
+      },
+      scales:{
+        x:{ ticks:{ color:'#8a97a8', font:{ size:9 } }, grid:{ color:'rgba(255,255,255,.03)' } },
+        y:{ min:-yMax, max:yMax, ticks:{ color:'#8a97a8', font:{ size:9 }, callback:v=>(v>=0?'+':'\u2212')+'$'+Math.abs(v) }, grid:{ color:'rgba(255,255,255,.04)' } }
+      }
+    },
+    plugins:[projMoveLabels]
+  });
+}
+
+function drawBalmoTerminalTable(rows){
+  const tb = $('#balmoTerminalTable tbody');
+  const activeMoves = rows.filter(r=>!r.absent).map(r=>Math.abs(r.endMove));
+  const maxAbsMove = Math.max(0.01, ...activeMoves);
+  tb.innerHTML = rows.map(r=>{
+    if (r.absent) return `<tr><td>${monLabel(r.fwdDm+'-01')}</td><td>${r.k}</td><td colspan="6" style="color:var(--muted)">no strip data</td></tr>`;
+    const mvCls = r.endMove>0?'d-pos':(r.endMove<0?'d-neg':'');
+    const barPct = Math.min(50, (Math.abs(r.endMove)/maxAbsMove)*50);
+    const barCls = r.endMove>=0 ? '' : 'neg';
+    const moveBar = `<td class="bar-cell ${mvCls}"><div class="bar-axis"></div><div class="bar-track ${barCls}" style="width:${barPct}%"></div><span class="bar-label">${fmtSignedDollarQ(r.endMove)}</span></td>`;
+    // Mispricing = new_fair - current  (same as endMove but framed as buy/sell ammo)
+    const mp = r.misprice;
+    const mpCls = mp>0.5?'d-pos':(mp<-0.5?'d-neg':'');
+    const mpBar = `<td class="bar-cell ${mpCls}"><div class="bar-axis"></div><div class="bar-track ${mp>=0?'':'neg'}" style="width:${Math.min(50, Math.abs(mp)/maxAbsMove*50)}%"></div><span class="bar-label">${fmtSignedDollarQ(mp)}</span></td>`;
+    let signal = '\u2014';
+    if (mp > 1.0) signal = '<span class="pill pill-under">BUY</span>';
+    else if (mp < -1.0) signal = '<span class="pill pill-over">SELL</span>';
+    else signal = '<span class="pill pill-flat">HOLD</span>';
+    return `<tr>
+      <td>${monLabel(r.fwdDm+'-01')}</td>
+      <td>${r.k}</td>
+      <td>${fmtDollarQ(r.currentFwd)}</td>
+      <td>${r.beta>=0?'+':'\u2212'}${Math.abs(r.beta).toFixed(3)}</td>
+      ${moveBar}
+      <td style="color:#f5c56b;font-weight:700">${fmtDollarQ(r.endPrice)}</td>
+      ${mpBar}
+      <td>${signal}</td>
+    </tr>`;
+  }).join('');
+}
+
+function drawBalmoTip(rows, surprise){
+  const el = $('#balmoTip');
+  if (!el) return;
+  const active = rows.filter(r=>!r.absent);
+  if (active.length === 0){ el.textContent = '\u2014'; return; }
+  let bias = surprise > 0.1 ? 'higher' : (surprise < -0.1 ? 'lower' : 'flat');
+  // Best buy: biggest positive misprice (fair - current); best sell: biggest negative
+  const sorted = [...active].sort((a,b)=>b.misprice - a.misprice);
+  const bestBuy = sorted[0];
+  const bestSell = sorted[sorted.length-1];
+  const curDm = $('#balmoCurMonth').value;
+  const curName = monLabel(curDm+'-01');
+  let html = '';
+  if (bias === 'flat'){
+    html = `${curName} settling near baseline \u2014 no directional signal from balmo. Wait for divergence.`;
+  } else if (bias === 'higher'){
+    html = `${curName} settling <span class="up">HIGHER than expected</span> (${fmtSignedDollarQ(surprise)}) \u2192 whole curve should lift. `+
+           `Best <b>BUY ammo</b>: <b>${monLabel(bestBuy.fwdDm+'-01')}</b> at <b>${fmtDollarQ(bestBuy.currentFwd)}</b>, fair ${fmtDollarQ(bestBuy.endPrice)} (<span class="up">${fmtSignedDollarQ(bestBuy.misprice)}</span> underpriced). `+
+           `Worst place to buy: ${monLabel(bestSell.fwdDm+'-01')} (${fmtSignedDollarQ(bestSell.misprice)}).`;
+  } else {
+    html = `${curName} settling <span class="dn">LOWER than expected</span> (${fmtSignedDollarQ(surprise)}) \u2192 whole curve should drop. `+
+           `Best <b>SELL ammo</b>: <b>${monLabel(bestSell.fwdDm+'-01')}</b> at <b>${fmtDollarQ(bestSell.currentFwd)}</b>, fair ${fmtDollarQ(bestSell.endPrice)} (<span class="dn">${fmtSignedDollarQ(bestSell.misprice)}</span> overpriced). `+
+           `Best <b>BUY</b> hedge: ${monLabel(bestBuy.fwdDm+'-01')} (${fmtSignedDollarQ(bestBuy.misprice)}).`;
+  }
+  el.innerHTML = html;
+}
+
+function drawDailyChart(){
+  const canvas = $('#dailyChart');
+  if (!canvas || !DAILY) return;
+  const src = DAILY.series;
+  const slice = DAILY_LOOKBACK >= src.length ? src : src.slice(-DAILY_LOOKBACK);
+  const labels = slice.map(r => r.d);
+  const settle = slice.map(r => r.p);
+  const r30    = slice.map(r => r.r30);
+  const r90    = slice.map(r => r.r90);
+  const r365   = slice.map(r => r.r365);
+
+  if (dailyChart) dailyChart.destroy();
+  dailyChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Daily settle', data: settle, borderColor: '#7ecbff', backgroundColor: 'rgba(126,203,255,.10)', borderWidth: 1, pointRadius: 0, tension: 0.0, fill: true },
+        { label: '30D avg',   data: r30,  borderColor: '#f5c518', borderWidth: 1.5, pointRadius: 0, tension: 0.2, borderDash: [] },
+        { label: '90D avg',   data: r90,  borderColor: '#e879f9', borderWidth: 1.5, pointRadius: 0, tension: 0.2 },
+        { label: '365D avg',  data: r365, borderColor: '#31c48d', borderWidth: 1.5, pointRadius: 0, tension: 0.2 },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { color: '#cfd8e6', font: { size: 10 }, boxWidth: 10, padding: 8 } },
+        tooltip: { callbacks: { label: c => c.dataset.label + ': $' + Number(c.parsed.y).toFixed(2) } }
+      },
+      scales: {
+        x: { type: 'time', time: { unit: (DAILY_LOOKBACK<=180?'month':DAILY_LOOKBACK<=1095?'quarter':'year') },
+             ticks: { color: '#8a97a8', maxRotation: 0, font: { size: 9 } },
+             grid: { color: 'rgba(255,255,255,.04)' } },
+        y: { ticks: { color: '#8a97a8', font: { size: 9 }, callback: v => '$' + v }, grid: { color: 'rgba(255,255,255,.05)' } }
+      }
+    }
+  });
+}
+
+function renderRealized(){
+  const mnt = $('#realizedCard');
+  if (!mnt) return;
+  if (!REALIZED){ mnt.style.display = 'none'; return; }
+  mnt.style.display = '';
+  const yrs = REALIZED.year_rows;
+  // Find highs/lows for full-year to shade
+  const allBlended = yrs.map(y=>y.blended_avg).filter(v=>v!=null);
+  const hi = Math.max(...allBlended), lo = Math.min(...allBlended);
+  const cols = yrs.map(y=>{
+    const isHi = y.blended_avg === hi;
+    const isLo = y.blended_avg === lo;
+    const shade = isHi ? 'rz-hi' : isLo ? 'rz-lo' : '';
+    const rzTxt = y.realized_avg!=null ? '$'+y.realized_avg.toFixed(2) : '\u2014';
+    const stTxt = y.strip_avg_future!=null ? '$'+y.strip_avg_future.toFixed(2) : '\u2014';
+    const fyTxt = y.blended_avg!=null ? '$'+y.blended_avg.toFixed(2) : '\u2014';
+    const rzSub = y.realized_n ? y.realized_n+'mo' : '';
+    const stSub = y.strip_n_future ? y.strip_n_future+'mo' : '';
+    return `<div class="rz-col ${shade}">
+      <div class="yr">${y.year}</div>
+      <div class="rz-cell rz-realized"><div class="lbl">Realized${rzSub?' '+rzSub:''}</div><div class="val">${rzTxt}</div></div>
+      <div class="rz-cell rz-strip"><div class="lbl">Strip${stSub?' '+stSub:''}</div><div class="val">${stTxt}</div></div>
+      <div class="rz-cell rz-full"><div class="lbl">Full-Year</div><div class="val">${fyTxt}</div></div>
+    </div>`;
+  }).join('');
+  mnt.innerHTML = `
+    <h3>AESO 7\u00d724 \u2014 Realized vs Current Strip <span class="sub">Realized through ${REALIZED.last_realized_month.slice(0,7)} \u00b7 Strip settles as of ${DATA.latest_trade_date} \u00b7 Overall realized avg (Jan 2022 \u2013 Aug 2026): $${REALIZED.overall_realized_avg.toFixed(2)}/MWh</span></h3>
+    <div class="rz-grid" style="grid-template-columns:repeat(${yrs.length},1fr)">${cols}</div>`;
+}
+
+function pctRangeForWindow(fullSeries, days){
+  // days=0 means "All"
+  const slice = (!days || days>=fullSeries.length) ? fullSeries : fullSeries.slice(-days);
+  if (!slice.length) return null;
+  const prices = slice.map(x=>x.p);
+  const cur = prices[prices.length-1];
+  const mn = Math.min(...prices);
+  const mx = Math.max(...prices);
+  if (mx === mn) return 50; // flat window
+  return (cur - mn) / (mx - mn) * 100;
+}
+
+function statsFor(contract){
+  const full = DATA.contracts[contract].series;
+  const s = sliceLookback(full);
+  if(!s.length) return null;
+  const prices = s.map(x=>x.p);
+  const cur = prices[prices.length-1];
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const pLo = pct(prices, BAND);
+  const pHi = pct(prices, 100-BAND);
+  const p05 = pct(prices, 5);
+  const p10 = pct(prices, 10);
+  const p90 = pct(prices, 90);
+  const p95 = pct(prices, 95);
+  const med = pct(prices, 50);
+  const ma_a = sma(s, MA_A);
+  const ma_b = sma(s, MA_B);
+  const range = max-min || 1;
+  const pctRank = (cur - min) / range * 100;
+  // True percentile rank (position within sorted distribution)
+  const below = prices.filter(v=>v<cur).length;
+  const equal = prices.filter(v=>v===cur).length;
+  const truePct = (below + 0.5*equal) / prices.length * 100;
+  let signal = 'mid';
+  if (cur <= pLo) signal = 'buy';
+  else if (cur >= pHi) signal = 'sell';
+  // Fixed-window % of range values (independent of top-toggle lookback)
+  const winPct = {
+    d30:  pctRangeForWindow(full, 30),
+    d90:  pctRangeForWindow(full, 90),
+    d180: pctRangeForWindow(full, 180),
+    d365: pctRangeForWindow(full, 365),
+    d730: pctRangeForWindow(full, 730),
+    all:  pctRangeForWindow(full, 0),
+  };
+  return {series:s, prices, cur, min, max, p05, p10, p90, p95, pLo, pHi, med, ma_a, ma_b, pctRank, truePct, signal, winPct};
+}
+
+function activeContracts(){
+  const monthKeys = Object.keys(DATA.contracts).filter(k=>k.length===7 && k[4]==='-').sort();
+  const today = new Date();
+  const curYm = today.toISOString().slice(0,7);
+  const promptStart = monthKeys.findIndex(k=>k>curYm);
+  const months = promptStart>=0 ? monthKeys.slice(promptStart, promptStart+12) : monthKeys.slice(0,12);
+  const qs = ['Q1-27','Q2-27','Q3-27','Q4-27','Q1-28','Q2-28','Q3-28','Q4-28'].filter(k=>DATA.contracts[k]);
+  const cals = ['CAL27','CAL28','CAL29','CAL30'].filter(k=>DATA.contracts[k]);
+
+  const chartMonths = months.slice(0, 6);
+  let chartQs = [];
+  if (chartMonths.length){
+    const last = chartMonths[chartMonths.length-1];
+    let y = +last.slice(0,4), m = +last.slice(5,7);
+    m += 1; if (m===13){ m=1; y+=1; }
+    const startQ = Math.floor((m-1)/3)+1;
+    let qy = y, qq = startQ;
+    for (let i=0;i<3;i++){
+      chartQs.push(`Q${qq}-${String(qy).slice(-2)}`);
+      qq += 1; if (qq===5){ qq=1; qy+=1; }
+    }
+    chartQs = chartQs.filter(k=>DATA.contracts[k]);
+  }
+  const chartCals = ['CAL27','CAL28','CAL29'].filter(k=>DATA.contracts[k]);
+  const chartKeys = [...chartMonths, ...chartQs, ...chartCals];
+
+  return {months, qs, cals, chartKeys};
+}
+
+function renderPowerMarks(){
+  if (!$('#pm')) return; // container removed from Strip Dashboard
+  const {months, qs, cals} = activeContracts();
+  const recFor = s => {
+    if (!s) return {txt:'—', cls:'rec-hold'};
+    if (s.pctRank <= 10) return {txt:'BUY',  cls:'rec-buy'};
+    if (s.pctRank >= 90) return {txt:'SELL', cls:'rec-sell'};
+    return {txt:'HOLD', cls:'rec-hold'};
+  };
+  const heatCls = s => {
+    if (!s) return '';
+    const p = s.pctRank;
+    if (p<=10) return 'heat-1';
+    if (p<=25) return 'heat-2';
+    if (p<=40) return 'heat-3';
+    if (p<=60) return 'heat-4';
+    if (p<=75) return 'heat-5';
+    if (p<=90) return 'heat-6';
+    return 'heat-7';
+  };
+  const winHeat = v => {
+    if (v == null) return '';
+    if (v <= 10) return 'heat-1';
+    if (v <= 25) return 'heat-2';
+    if (v <= 40) return 'heat-3';
+    if (v <= 60) return 'heat-4';
+    if (v <= 75) return 'heat-5';
+    if (v <= 90) return 'heat-6';
+    return 'heat-7';
+  };
+  const winFmt = v => v == null ? '\u2014' : v.toFixed(0)+'%';
+  const activeLbLabel = LOOKBACK===0 ? 'All' : (LOOKBACK>=365 ? (LOOKBACK/365)+'Y' : LOOKBACK+'D');
+  // Current percentile helper: uses truePct against lookback series (same distribution as P50 etc.)
+  const curPctFmt = s => s.truePct.toFixed(0) + '%';
+  const rows = [
+    {label:'Current Market',      get:s=>fmtQ(s.cur), cellCls:heatCls},
+    {label:'Current Percentile',  get:curPctFmt, cellCls:s=>winHeat(s.truePct), rowCls:'cur-pct-row'},
+    {label:'P10 Bid',             get:s=>fmtQ(s.p10), rowCls:'p10bid-row'},
+    {label:'P90 Offer',           get:s=>fmtQ(s.p90), rowCls:'p90offer-row'},
+    {label:'Min',                 get:s=>fmtQ(s.min), rowCls:'min-row'},
+    {label:'Max',                 get:s=>fmtQ(s.max), rowCls:'max-row'},
+    {label:'P5',                  get:s=>fmtQ(s.p05), rowCls:'p05-row'},
+    {label:'P'+BAND,              get:s=>fmtQ(s.pLo), rowCls:'pLo-row', cellCls:s=> s.signal==='buy'?'trig-buy':''},
+    {label:'P50',                 get:s=>fmtQ(s.med), rowCls:'p50-row'},
+    {label:'P'+(100-BAND),        get:s=>fmtQ(s.pHi), rowCls:'pHi-row', cellCls:s=> s.signal==='sell'?'trig-sell':''},
+    {label:'P95',                 get:s=>fmtQ(s.p95), rowCls:'p95-row'},
+    {label:'\u2605 % of '+activeLbLabel+' Range', get:s=>s.pctRank.toFixed(0)+'%', cellCls:heatCls, rowCls:'pct-active'},
+    {label:'% of 30D Range',  get:s=>winFmt(s.winPct.d30),  cellCls:s=>winHeat(s.winPct.d30)},
+    {label:'% of 90D Range',  get:s=>winFmt(s.winPct.d90),  cellCls:s=>winHeat(s.winPct.d90)},
+    {label:'% of 180D Range', get:s=>winFmt(s.winPct.d180), cellCls:s=>winHeat(s.winPct.d180)},
+    {label:'% of 1Y Range',   get:s=>winFmt(s.winPct.d365), cellCls:s=>winHeat(s.winPct.d365)},
+    {label:'% of 2Y Range',   get:s=>winFmt(s.winPct.d730), cellCls:s=>winHeat(s.winPct.d730)},
+    {label:'% of All Range',  get:s=>winFmt(s.winPct.all),  cellCls:s=>winHeat(s.winPct.all)},
+    {label:'Recommendation', get:s=>recFor(s).txt, cellCls:s=>recFor(s).cls, rowCls:'rec-row'},
+    {label:'What-If Price',       get:(s,k)=>`<input type="text" class="whatif-in" data-k="${k}" placeholder="$\u2014" />`, rowCls:'whatif-in-row', raw:true},
+    {label:'What-If Percentile',  get:(s,k)=>`<span class="whatif-out" data-k="${k}">\u2014</span>`, rowCls:'whatif-out-row', raw:true},
+  ];
+  const groups = [
+    {keys: months, label:'MONTHS'},
+    {keys: qs,     label:'QUARTERS'},
+    {keys: cals,   label:'CALS'},
+  ];
+  let html = '<table><thead><tr><th></th>';
+  groups.forEach((g,gi)=>{
+    g.keys.forEach(k=>{ html += `<th>${DATA.contracts[k].label}</th>`; });
+    if (gi<groups.length-1) html += '<th class="sep"></th>';
+  });
+  html += '</tr></thead><tbody>';
+  const statsByGroup = groups.map(g=> g.keys.map(k=>statsFor(k)));
+  for(const row of rows){
+    html += `<tr class="${row.rowCls||''}"><td>${row.label}</td>`;
+    groups.forEach((g,gi)=>{
+      const stats = statsByGroup[gi];
+      for(let i=0;i<g.keys.length;i++){
+        const s = stats[i];
+        const k = g.keys[i];
+        const cls = row.cellCls?row.cellCls(s):'';
+        // Support rows that take a contract key (What-If rows) and raw HTML output
+        const val = s ? (row.raw ? row.get(s, k) : row.get(s)) : '\u2014';
+        html += `<td class="${cls}">${val}</td>`;
+      }
+      if (gi<groups.length-1) html += '<td class="sep"></td>';
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  $('#pm').innerHTML = html;
+  wireWhatIfInputs();
+}
+
+// ============ WHAT-IF PERCENTILE INPUTS ============
+// In-memory store (preview iframe blocks sessionStorage)
+const WHATIF_STORE = {};
+function wireWhatIfInputs(){
+  const inputs = document.querySelectorAll('#pm input.whatif-in');
+  inputs.forEach(inp => {
+    const k = inp.getAttribute('data-k');
+    const stored = WHATIF_STORE[k];
+    if (stored) { inp.value = stored; updateWhatIfCell(k, stored); }
+    inp.addEventListener('input', e => {
+      const val = e.target.value;
+      WHATIF_STORE[k] = val;
+      updateWhatIfCell(k, val);
+    });
+  });
+}
+
+function updateWhatIfCell(k, raw){
+  const outEl = document.querySelector(`#pm span.whatif-out[data-k="${k}"]`);
+  if (!outEl) return;
+  const numStr = String(raw).replace(/[$,\s]/g, '');
+  const price = parseFloat(numStr);
+  if (!isFinite(price)){
+    outEl.textContent = '\u2014';
+    outEl.className = 'whatif-out';
+    outEl.removeAttribute('data-heat');
+    return;
+  }
+  const c = DATA && DATA.contracts && DATA.contracts[k];
+  if (!c || !c.series || !c.series.length){
+    outEl.textContent = '\u2014';
+    return;
+  }
+  // Use the SAME lookback window as the main table (sliceLookback) so the percentile matches the P50/P15/P85 rows above
+  const sliced = sliceLookback(c.series);
+  const prices = sliced.map(x=>x.p);
+  if (!prices.length){ outEl.textContent='\u2014'; return; }
+  const below = prices.filter(v => v < price).length;
+  const equal = prices.filter(v => v === price).length;
+  const truePct = (below + 0.5*equal) / prices.length * 100;
+  outEl.textContent = truePct.toFixed(0) + '%';
+  // Apply heat class
+  let heat = 'heat-4';
+  if      (truePct <= 10) heat = 'heat-1';
+  else if (truePct <= 25) heat = 'heat-2';
+  else if (truePct <= 40) heat = 'heat-3';
+  else if (truePct <= 60) heat = 'heat-4';
+  else if (truePct <= 75) heat = 'heat-5';
+  else if (truePct <= 90) heat = 'heat-6';
+  else                    heat = 'heat-7';
+  outEl.className = 'whatif-out ' + heat;
+}
+
+const charts = {};
+
+function renderChart(contract, mount){
+  const s = statsFor(contract);
+  if(!s){ mount.innerHTML='<div class="hint">no data</div>'; return; }
+  const c = DATA.contracts[contract];
+  const badgeCls = s.signal==='buy'?'b-buy':(s.signal==='sell'?'b-sell':'b-mid');
+  const badgeTxt = s.signal==='buy'?'BUY':(s.signal==='sell'?'SELL':'mid');
+  const pctBoxCls = s.signal==='buy'?'pct-buy':(s.signal==='sell'?'pct-sell':'pct-mid');
+  const pctTxt = s.truePct.toFixed(0)+'%';
+
+  mount.innerHTML = `
+    <div class="hd">
+      <div class="ttl">${c.label}<span class="badge ${badgeCls}">${badgeTxt}</span></div>
+      <div class="px">${fmtQ(s.cur)}</div>
+    </div>
+    <div class="sub">Range ${fmtQ(s.min)} → ${fmtQ(s.max)} · Median ${fmtQ(s.med)}</div>
+    <div class="cv">
+      <canvas></canvas>
+      <div class="pctbox ${pctBoxCls}">
+        <div class="lbl">Now at</div>
+        <div class="big">${pctTxt}</div>
+        <div class="row"><span>BUY ≤</span><span>${fmtQ(s.pLo)}</span></div>
+        <div class="row"><span>SELL ≥</span><span>${fmtQ(s.pHi)}</span></div>
+      </div>
+    </div>
+  `;
+  const canvas = mount.querySelector('canvas');
+  if (charts[contract]) charts[contract].destroy();
+  const labels = s.series.map(x=>x.d);
+  charts[contract] = new Chart(canvas, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {label:'Settle', data:s.prices, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--line').trim(),
+         borderWidth:1.8, pointRadius:0, tension:0.15, fill:false},
+        {label:'MA'+MA_A, data:s.ma_a, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--ma1').trim(),
+         borderWidth:1.3, pointRadius:0, fill:false},
+        {label:'MA'+MA_B, data:s.ma_b, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--ma2').trim(),
+         borderWidth:1.3, pointRadius:0, fill:false},
+      ]
+    },
+    options:{
+      animation:false,
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{mode:'index',intersect:false, callbacks:{label:(ctx)=>ctx.dataset.label+': '+fmt(ctx.parsed.y)}},
+        annotation:{
+          annotations:{
+            pHi:{type:'line', yMin:s.pHi, yMax:s.pHi, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--p85').trim(),
+                 borderDash:[5,3], borderWidth:1.2, label:{display:false}},
+            pLo:{type:'line', yMin:s.pLo, yMax:s.pLo, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--p15').trim(),
+                 borderDash:[5,3], borderWidth:1.2, label:{display:false}},
+            med:{type:'line', yMin:s.med, yMax:s.med, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--median').trim(),
+                 borderDash:[2,3], borderWidth:1, label:{display:false}},
+            zoneHi:{type:'box', yMin:s.pHi, yMax:Math.max(s.pHi, s.max), backgroundColor:'rgba(239,68,68,.06)', borderWidth:0},
+            zoneLo:{type:'box', yMin:Math.min(s.pLo, s.min), yMax:s.pLo, backgroundColor:'rgba(49,196,141,.06)', borderWidth:0},
+          }
+        }
+      },
+      layout:{padding:{top:2,right:2,left:0,bottom:0}},
+      scales:{
+        x:{ticks:{color:'#8ea3bd', maxTicksLimit:6, font:{size:9}, autoSkip:true, maxRotation:0}, grid:{display:false}},
+        y:{ticks:{color:'#8ea3bd', font:{size:9}, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{color:'rgba(255,255,255,.04)'}}
+      }
+    }
+  });
+}
+
+function render(){
+  renderPowerMarks();
+  const {chartKeys} = activeContracts();
+  const c = $('#allCharts');
+  c.innerHTML = chartKeys.map(k=>`<div class="card" data-c="${k}"></div>`).join('');
+  for(const k of chartKeys) renderChart(k, c.querySelector(`[data-c="${k}"]`));
+  renderPctPath();
+}
+
+// ============ PERCENTILES PATH TAB ============
+const pctCharts = {};
+
+function pctPathSeriesFor(contract, win, span){
+  const c = DATA.contracts[contract];
+  if (!c || !c.series || !c.series.length) return null;
+  const full = c.series;
+  const out = [];
+  for (let i=0; i<full.length; i++){
+    const lo = Math.max(0, i - win + 1);
+    const window_arr = full.slice(lo, i+1);
+    if (window_arr.length < 5) continue;
+    let mn = Infinity, mx = -Infinity;
+    for (const r of window_arr){ if (r.p < mn) mn = r.p; if (r.p > mx) mx = r.p; }
+    const pct = mx===mn ? 50 : (full[i].p - mn) / (mx - mn) * 100;
+    out.push({d: full[i].d, p: pct, price: full[i].p, mn, mx});
+  }
+  // Trim to display span (last N rows)
+  const trimmed = (span >= 9999 || span >= out.length) ? out : out.slice(-span);
+  return {label: c.label, current: c.current, rows: trimmed};
+}
+
+function renderPctPath(){
+  const mount = $('#allPctCharts');
+  if (!mount) return;
+  const win  = parseInt($('#pctWindow').value, 10);
+  const span = parseInt($('#pctSpan').value, 10);
+  const {chartKeys} = activeContracts();
+
+  mount.innerHTML = chartKeys.map(k=>`<div class="card" data-cp="${k}"></div>`).join('');
+  for (const k of chartKeys){
+    const host = mount.querySelector(`[data-cp="${k}"]`);
+    const s = pctPathSeriesFor(k, win, span);
+    if (!s || !s.rows.length){ host.innerHTML='<div class="hint">no data</div>'; continue; }
+    const nowPct = s.rows[s.rows.length-1].p;
+    const badgeCls = nowPct<=20?'b-buy':(nowPct>=80?'b-sell':'b-mid');
+    const badgeTxt = nowPct<=20?'LOW':(nowPct>=80?'HIGH':'mid');
+    const pctBoxCls = nowPct<=20?'pct-buy':(nowPct>=80?'pct-sell':'pct-mid');
+    host.innerHTML = `
+      <div class="hd">
+        <div class="ttl">${s.label}<span class="badge ${badgeCls}">${badgeTxt}</span></div>
+        <div class="px">${nowPct.toFixed(0)}%</div>
+      </div>
+      <div class="sub">Now $${s.current.toFixed(2)} \u00b7 ${win}d window \u00b7 ${s.rows.length} days shown</div>
+      <div class="cv">
+        <canvas></canvas>
+        <div class="pctbox ${pctBoxCls}">
+          <div class="lbl">Now at</div>
+          <div class="big">${nowPct.toFixed(0)}%</div>
+          <div class="row"><span>Range</span><span>$${s.rows[s.rows.length-1].mn.toFixed(2)}\u2013$${s.rows[s.rows.length-1].mx.toFixed(2)}</span></div>
+        </div>
+      </div>
+    `;
+    const canvas = host.querySelector('canvas');
+    if (pctCharts[k]) pctCharts[k].destroy();
+    const labels = s.rows.map(r=>r.d);
+    const pctData = s.rows.map(r=>r.p);
+    // color line by current position
+    const lineColor = nowPct<=20 ? '#31c48d' : (nowPct>=80 ? '#ef4444' : getComputedStyle(document.documentElement).getPropertyValue('--line').trim());
+    pctCharts[k] = new Chart(canvas, {
+      type:'line',
+      data:{ labels, datasets:[{
+        label:'%ile', data: pctData,
+        borderColor: lineColor, borderWidth:1.6, pointRadius:0, tension:0.15, fill:false,
+      }]},
+      options:{
+        animation:false, responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{mode:'index',intersect:false, callbacks:{
+            label:(ctx)=>{ const r = s.rows[ctx.dataIndex]; return `%ile ${ctx.parsed.y.toFixed(0)}% \u00b7 $${r.price.toFixed(2)} \u00b7 range $${r.mn.toFixed(2)}\u2013$${r.mx.toFixed(2)}`; }
+          }},
+          annotation:{
+            annotations:{
+              hi: {type:'line', yMin:80, yMax:80, borderColor:'rgba(239,68,68,.6)', borderDash:[5,3], borderWidth:1.2},
+              lo: {type:'line', yMin:20, yMax:20, borderColor:'rgba(49,196,141,.6)', borderDash:[5,3], borderWidth:1.2},
+              mid:{type:'line', yMin:50, yMax:50, borderColor:'rgba(255,255,255,.2)', borderDash:[2,3], borderWidth:1},
+              zoneHi:{type:'box', yMin:80, yMax:100, backgroundColor:'rgba(239,68,68,.06)', borderWidth:0},
+              zoneLo:{type:'box', yMin:0,  yMax:20,  backgroundColor:'rgba(49,196,141,.06)', borderWidth:0},
+            }
+          }
+        },
+        layout:{padding:{top:2,right:2,left:0,bottom:0}},
+        scales:{
+          x:{ticks:{color:'#8ea3bd', maxTicksLimit:6, font:{size:9}, autoSkip:true, maxRotation:0}, grid:{display:false}},
+          y:{min:0, max:100, ticks:{color:'#8ea3bd', font:{size:9}, stepSize:25, callback:v=>v+'%'}, grid:{color:'rgba(255,255,255,.04)'}}
+        }
+      }
+    });
+  }
+}
+
+// ============ TAB 2: EXECUTION SCORECARD (contract-centric) ============
+
+function fmtPnl(v){
+  if (v==null || !isFinite(v)) return '—';
+  const s = v>=0?'+':'−';
+  return s+'$'+Math.abs(v).toFixed(2);
+}
+function fmtDollarsBig(v){
+  if (v==null || !isFinite(v)) return '—';
+  const s = v>=0?'+':'−';
+  const abs = Math.abs(v);
+  return s+'$'+abs.toLocaleString(undefined,{maximumFractionDigits:0});
+}
+function fmtPct(v){ return v==null?'—':(v.toFixed(0)+'%'); }
+
+const BUCKET_ORDER = ["0-10","10-20","20-30","30-40","40-50","50-60","60-70","70-80","80-90","90-100"];
+
+// Fundamental-view signal: BUY only if market <= fund AND percentile is low; SELL only if market >= fund AND percentile is high.
+// If they don't align, HOLD (this is the whole point).
+function signalFor(t, fund){
+  if (t.exec_pct == null) return '';
+  const market = t.trade_price;
+  if (t.side==='B'){
+    if (market <= fund && t.exec_pct <= 20) return 'BUY \u2713';
+    if (market > fund && t.exec_pct <= 20)  return 'CHEAP·BUT·RICH';
+    if (market <= fund && t.exec_pct > 20)  return 'CHEAP·NOT·LOW';
+    return 'RICH·HIGH';
+  } else {
+    if (market >= fund && t.exec_pct >= 80) return 'SELL \u2713';
+    if (market < fund && t.exec_pct >= 80)  return 'RICH·BUT·CHEAP';
+    if (market >= fund && t.exec_pct < 80)  return 'RICH·NOT·HIGH';
+    return 'CHEAP·LOW';
+  }
+}
+
+function bucketZone(side, bucket){
+  if (side==='buys'){
+    if (bucket==='0-10' || bucket==='10-20') return 'target';
+    if (bucket==='80-90' || bucket==='90-100') return 'danger';
+  } else {
+    if (bucket==='80-90' || bucket==='90-100') return 'target';
+    if (bucket==='0-10' || bucket==='10-20') return 'danger';
+  }
+  return '';
+}
+
+function renderExec(){
+  if (!EXEC || !EXEC.trades) return;
+  const cur = EXEC.current_settle;
+  const fund = parseFloat($('#fundView').value);
+
+  $('#curMark').textContent = '$'+cur.toFixed(2)+' ('+EXEC.current_date+')';
+
+  const trades = EXEC.trades;
+  const buys  = trades.filter(t=>t.side==='B');
+  const sells = trades.filter(t=>t.side==='S');
+  const buyS  = EXEC.buys_summary;
+  const sellS = EXEC.sells_summary;
+  const allS  = EXEC.all_summary;
+
+  // === Tiles ===
+  const winRate = allS.n ? Math.round((allS.winners/allS.n)*100) : 0;
+  // Execution edge: (avg $/MWh low-buys) MINUS (avg $/MWh high-buys)  +  (avg $/MWh high-sells) MINUS (avg $/MWh low-sells)
+  const e = EXEC.edge;
+  const buyEdge  = (e.buy_low && e.buy_high) ? (e.buy_low.avg_pnl - e.buy_high.avg_pnl) : null;
+  const sellEdge = (e.sell_high && e.sell_low) ? (e.sell_high.avg_pnl - e.sell_low.avg_pnl) : null;
+
+  const heading = $('#execHeading'); if (heading) heading.textContent = `${EXEC.contract} Execution Scorecard`;
+  const bh = $('#buyBucketHead');  if (bh) bh.textContent = `P&L by ${EXEC.contract} Percentile on Trade Day \u00b7 BUYS`;
+  const sh = $('#sellBucketHead'); if (sh) sh.textContent = `P&L by ${EXEC.contract} Percentile on Trade Day \u00b7 SELLS`;
+  $('#execTiles').innerHTML = `
+    <div class="tile ${allS.total_pnl>0?'good':'bad'}">
+      <div class="k">${EXEC.contract} Mark-to-Market P&L</div>
+      <div class="v">${fmtDollarsBig(allS.total_pnl)}</div>
+      <div class="s">${allS.n} trades \u00b7 ${allS.total_mwh.toLocaleString()} MWh \u00b7 avg ${fmtPnl(allS.avg_pnl)}/MWh</div>
+    </div>
+    <div class="tile ${buyS.avg_pnl>0?'good':'bad'}">
+      <div class="k">Buys \u00b7 ${buyS.n} trades</div>
+      <div class="v">${fmtDollarsBig(buyS.total_pnl)}</div>
+      <div class="s">${buyS.winners}W / ${buyS.losers}L \u00b7 avg ${fmtPnl(buyS.avg_pnl)}/MWh \u00b7 avg %ile ${fmtPct(buyS.avg_pct)}</div>
+    </div>
+    <div class="tile ${sellS.avg_pnl>0?'good':'bad'}">
+      <div class="k">Sells \u00b7 ${sellS.n} trades</div>
+      <div class="v">${fmtDollarsBig(sellS.total_pnl)}</div>
+      <div class="s">${sellS.winners}W / ${sellS.losers}L \u00b7 avg ${fmtPnl(sellS.avg_pnl)}/MWh \u00b7 avg %ile ${fmtPct(sellS.avg_pct)}</div>
+    </div>
+    <div class="tile ${buyEdge!=null && buyEdge>0?'good':'bad'}">
+      <div class="k">Buy Execution Edge</div>
+      <div class="v">${buyEdge!=null?fmtPnl(buyEdge):'\u2014'}<span style="font-size:12px;color:var(--muted)"> /MWh</span></div>
+      <div class="s">(low-%ile buys) \u2212 (high-%ile buys)</div>
+    </div>
+    <div class="tile ${sellEdge!=null && sellEdge>0?'good':'bad'}">
+      <div class="k">Sell Execution Edge</div>
+      <div class="v">${sellEdge!=null?fmtPnl(sellEdge):'\u2014'}<span style="font-size:12px;color:var(--muted)"> /MWh</span></div>
+      <div class="s">(high-%ile sells) \u2212 (low-%ile sells)</div>
+    </div>
+    <div class="tile">
+      <div class="k">Win Rate</div>
+      <div class="v">${winRate}%</div>
+      <div class="s">${allS.winners} / ${allS.n} trades in the money vs current</div>
+    </div>
+  `;
+
+  // === Framework compliance tiles ===
+  const inZoneBuys  = (EXEC.buckets_buys['0-10'].n||0) + (EXEC.buckets_buys['10-20'].n||0);
+  const chaseBuys   = (EXEC.buckets_buys['80-90'].n||0) + (EXEC.buckets_buys['90-100'].n||0);
+  const inZoneSells = (EXEC.buckets_sells['80-90'].n||0) + (EXEC.buckets_sells['90-100'].n||0);
+  const chaseSells  = (EXEC.buckets_sells['0-10'].n||0) + (EXEC.buckets_sells['10-20'].n||0);
+  const nBuys  = buyS.n || 1;
+  const nSells = sellS.n || 1;
+  const pctInZoneBuy  = Math.round(inZoneBuys  / nBuys  * 100);
+  const pctChaseBuy   = Math.round(chaseBuys   / nBuys  * 100);
+  const pctInZoneSell = Math.round(inZoneSells / nSells * 100);
+  const pctChaseSell  = Math.round(chaseSells  / nSells * 100);
+  const totalTrades = buyS.n + sellS.n;
+  const totalInZone = inZoneBuys + inZoneSells;
+  const totalChase  = chaseBuys + chaseSells;
+  const pctInZoneAll = totalTrades ? Math.round(totalInZone / totalTrades * 100) : 0;
+  const pctChaseAll  = totalTrades ? Math.round(totalChase  / totalTrades * 100) : 0;
+
+  const clsGoodBad = (v, thresh)=> v >= thresh ? 'good' : (v < thresh/2 ? 'bad' : '');
+  $('#complianceTiles').innerHTML = `
+    <div class="tile ${clsGoodBad(pctInZoneBuy, 50)}">
+      <div class="k">In-Zone Buys (0\u201320% \u2705)</div>
+      <div class="v">${pctInZoneBuy}%</div>
+      <div class="s">${inZoneBuys} / ${buyS.n} buys \u00b7 target \u2265 50%</div>
+    </div>
+    <div class="tile ${pctChaseBuy>25?'bad':(pctChaseBuy<10?'good':'')}">
+      <div class="k">Chase Buys (80\u2013100% \u26a0\ufe0f)</div>
+      <div class="v">${pctChaseBuy}%</div>
+      <div class="s">${chaseBuys} / ${buyS.n} buys \u00b7 target \u2264 10%</div>
+    </div>
+    <div class="tile ${clsGoodBad(pctInZoneSell, 50)}">
+      <div class="k">In-Zone Sells (80\u2013100% \u2705)</div>
+      <div class="v">${pctInZoneSell}%</div>
+      <div class="s">${inZoneSells} / ${sellS.n} sells \u00b7 target \u2265 50%</div>
+    </div>
+    <div class="tile ${pctChaseSell>25?'bad':(pctChaseSell<10?'good':'')}">
+      <div class="k">Chase Sells (0\u201320% \u26a0\ufe0f)</div>
+      <div class="v">${pctChaseSell}%</div>
+      <div class="s">${chaseSells} / ${sellS.n} sells \u00b7 target \u2264 10%</div>
+    </div>
+    <div class="tile ${clsGoodBad(pctInZoneAll, 50)}">
+      <div class="k">Overall In-Zone Rate</div>
+      <div class="v">${pctInZoneAll}%</div>
+      <div class="s">${totalInZone} / ${totalTrades} trades hit the framework zone</div>
+    </div>
+    <div class="tile ${pctChaseAll>25?'bad':(pctChaseAll<10?'good':'')}">
+      <div class="k">Overall Chase Rate</div>
+      <div class="v">${pctChaseAll}%</div>
+      <div class="s">${totalChase} / ${totalTrades} trades violated \"never chase\"</div>
+    </div>
+  `;
+
+  // === Bucket tables ===
+  renderBucketTable('buys',  EXEC.buckets_buys,  '#buyBucketTable');
+  renderBucketTable('sells', EXEC.buckets_sells, '#sellBucketTable');
+
+  // === Commentary ===
+  renderCommentary(fund);
+
+  // === Rules ===
+  renderRules(fund);
+
+  // === Trade table ===
+  renderTradeTable();
+}
+
+let TRADE_FILTER = 'ALL';
+function renderTradeTable(){
+  if (!EXEC || !EXEC.trades) return;
+  let list = EXEC.trades.slice();
+  if (TRADE_FILTER === 'B') list = list.filter(t=>t.side==='B');
+  else if (TRADE_FILTER === 'S') list = list.filter(t=>t.side==='S');
+  // Sort oldest first (ascending by date)
+  list.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const cntEl = $('#tradeCount');
+  if (cntEl){
+    const totMwh = list.reduce((s,t)=>s+t.mwh,0);
+    const totPnl = list.reduce((s,t)=>s+t.pnl_total,0);
+    cntEl.innerHTML = `${list.length} trades \u00b7 ${totMwh.toLocaleString()} MWh \u00b7 <strong class="${totPnl>=0?'pnl-pos':'pnl-neg'}">${fmtDollarsBig(totPnl)}</strong>`;
+  }
+  const tb = $('#execTable tbody');
+  const fundEl = $('#fundView');
+  const fund = fundEl ? (parseFloat(fundEl.value) || 45) : 45;
+  tb.innerHTML = list.map(t=>{
+    const pnlCls = t.pnl_per_mwh>0?'pnl-pos':(t.pnl_per_mwh<0?'pnl-neg':'');
+    const bkt = t.exec_bucket || '\u2014';
+    const zone = bucketZone(t.side==='B'?'buys':'sells', bkt);
+    const bktStyle = zone==='target' ? 'color:var(--grade-a);font-weight:700' : zone==='danger' ? 'color:var(--grade-f);font-weight:700' : '';
+    const sig = signalFor(t, fund);
+    const sigCls = sig.startsWith('BUY') || sig.startsWith('SELL') ? 'pnl-pos' : (sig.includes('RICH·HIGH') || sig.includes('CHEAP·LOW') ? 'pnl-neg' : '');
+    return `<tr>
+      <td>${t.date}</td>
+      <td class="bs-${t.side}">${t.side}</td>
+      <td>${t.qty}</td>
+      <td>${t.mwh.toLocaleString()}</td>
+      <td>$${t.trade_price.toFixed(2)}</td>
+      <td>${t.day_mark!=null?'$'+t.day_mark.toFixed(2):'\u2014'}</td>
+      <td>${t.exec_pct!=null?t.exec_pct.toFixed(0)+'%':'\u2014'}</td>
+      <td style="${bktStyle}">${bkt}</td>
+      <td>$${EXEC.current_settle.toFixed(2)}</td>
+      <td class="${pnlCls}">${fmtPnl(t.pnl_per_mwh)}</td>
+      <td class="${pnlCls}">${fmtDollarsBig(t.pnl_total)}</td>
+      <td class="${sigCls}" style="font-size:10px;font-weight:700;letter-spacing:.3px">${sig}</td>
+    </tr>`;
+  }).join('');
+}
+
+function wireTradeFilters(){
+  $$('.seg-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      TRADE_FILTER = btn.dataset.filter;
+      $$('.seg-btn').forEach(b=>{
+        const on = b.dataset.filter === TRADE_FILTER;
+        b.classList.toggle('active', on);
+        b.style.background = on ? 'var(--accent)' : 'transparent';
+        b.style.color = on ? '#0b1220' : 'var(--text)';
+        b.style.fontWeight = on ? '700' : '600';
+      });
+      renderTradeTable();
+    });
+  });
+}
+
+function renderBucketTable(side, buckets, mountSel){
+  // Find max abs total_pnl for bar scaling
+  let maxAbs = 0.01;
+  for (const b of BUCKET_ORDER){
+    const s = buckets[b];
+    if (s && s.total_pnl!=null) maxAbs = Math.max(maxAbs, Math.abs(s.total_pnl));
+  }
+  let html = `<thead><tr><th>%ile Bucket</th><th>#</th><th>Mean Trade $</th><th>Avg $/MWh</th><th>Total P&L</th><th style="min-width:120px">P&L</th></tr></thead><tbody>`;
+  for (const b of BUCKET_ORDER){
+    const s = buckets[b];
+    const zone = bucketZone(side, b);
+    const rowCls = zone==='target' ? 'hi-good' : zone==='danger' ? 'hi-chase' : '';
+    if (!s || s.n===0){
+      html += `<tr class="${rowCls}"><td>${b}</td><td class="dim">0</td><td class="dim">\u2014</td><td class="dim">\u2014</td><td class="dim">\u2014</td><td class="dim">\u2014</td></tr>`;
+      continue;
+    }
+    const pct = Math.min(100, Math.abs(s.total_pnl)/maxAbs*50);
+    const pnlCls = s.avg_pnl>=0?'pos':'neg';
+    const barCls = s.total_pnl>=0?'pos':'neg';
+    const barStyle = s.total_pnl>=0 ? `width:${pct}%;left:50%` : `width:${pct}%;left:${50-pct}%`;
+    html += `<tr class="${rowCls}"><td>${b}</td><td>${s.n}</td><td>$${s.mean_trade_price.toFixed(2)}</td>`
+          + `<td class="${pnlCls}">${fmtPnl(s.avg_pnl)}</td>`
+          + `<td class="${pnlCls}">${fmtDollarsBig(s.total_pnl)}</td>`
+          + `<td><div class="bucket-bar"><div class="mid"></div><div class="fill ${barCls}" style="${barStyle}"></div></div></td></tr>`;
+  }
+  html += `</tbody>`;
+  $(mountSel).innerHTML = html;
+}
+
+function renderCommentary(fund){
+  const e = EXEC.edge;
+  const buyEdge  = (e.buy_low && e.buy_high) ? (e.buy_low.avg_pnl - e.buy_high.avg_pnl) : null;
+  const cur = EXEC.current_settle;
+  const gap = fund - cur;
+  const gapAbs = Math.abs(gap);
+
+  let stance;
+  if (gap > 2)      stance = `Fundamentals say <strong>BUY</strong> (fair $${fund.toFixed(2)} vs market $${cur.toFixed(2)}). Only pull the trigger at 0\u201320% \u2014 don't chase into 80%+.`;
+  else if (gap<-2) stance = `Fundamentals say <strong>SELL</strong> (fair $${fund.toFixed(2)} vs market $${cur.toFixed(2)}). Only sell at 80\u2013100% \u2014 don't dump into 0\u201320%.`;
+  else             stance = `Fundamentals say <strong>STAND ASIDE</strong> (fair $${fund.toFixed(2)} \u2248 market $${cur.toFixed(2)}). Trade only at percentile extremes.`;
+
+  const html = `
+    <h3>${EXEC.contract} \u2014 execution vs fundamentals</h3>
+    <ul style="margin:4px 0 8px 18px;padding:0">
+      <li><strong>Book:</strong> ${fmtDollarsBig(EXEC.all_summary.total_pnl)} MtM. Sells ${fmtDollarsBig(EXEC.sells_summary.total_pnl)} \u00b7 Buys ${fmtDollarsBig(EXEC.buys_summary.total_pnl)}. Direction did the work; execution decided the size of each win or loss.</li>
+      <li><strong>Buy edge:</strong> 0\u201320% buys ${fmtPnl(e.buy_low.avg_pnl)}/MWh vs 80\u2013100% buys ${fmtPnl(e.buy_high.avg_pnl)}/MWh. Clean entries lost <strong>${fmtPnl(buyEdge)}/MWh less</strong>.</li>
+      <li><strong>Sell edge (${EXEC.contract} context):</strong> If sells all show green while high-%ile chases lose, direction bailed you out. On a two-way market the 80\u2013100% bucket wins by design \u2014 same rule as buys, mirrored.</li>
+      <li><strong>Rule:</strong> Fundamentals set direction. Percentile decides the trigger. If they don\u2019t align, don\u2019t trade.</li>
+      <li><strong>Now:</strong> ${stance}</li>
+    </ul>`;
+  $('#execCommentary').innerHTML = html;
+}
+
+function renderRules(fund){
+  const rules = [
+    `<strong>Fundamental view first.</strong> Decide fair value before you look at the screen.`,
+    `<strong>Buy 0\u201320% only. Sell 80\u2013100% only.</strong> Mid-range = hold.`,
+    `<strong>Never chase.</strong> No buys 80\u2013100%. No sells 0\u201320%.</em>`,
+    `<strong>Both must align.</strong> Low percentile + fundamentals below market = "low for a reason," don\u2019t buy. High percentile + fundamentals above market = wait, don\u2019t sell.`,
+    `<strong>Full size in the zone, small pokes outside.</strong> 5+ lots only at the extremes.`,
+  ];
+  $('#execRules').innerHTML = `<h3>Rules of execution</h3><ol>${rules.map(x=>`<li>${x}</li>`).join('')}</ol>`;
+}
+
+// ============ ALERT BANNER (Strong Buys / Strong Sells) ============
+function renderAlertBanner(){
+  const buyMnt  = document.getElementById('alertBuyItems');
+  const sellMnt = document.getElementById('alertSellItems');
+  if (!buyMnt || !sellMnt) return;
+
+  // Use current active contracts (matches the main strip table)
+  const active = (typeof activeContracts === 'function')
+    ? activeContracts()
+    : { months: [], qs: [], cals: [] };
+  const allKeys = [
+    ...(active.months || []),
+    ...(active.qs || []),
+    ...(active.cals || [])
+  ].filter(k => DATA.contracts && DATA.contracts[k]);
+
+  // For each contract, compute % of 90D range (primary), plus a suite of other windows
+  const rows = [];
+  for (const k of allKeys){
+    const c = DATA.contracts[k];
+    if (!c || !c.series || c.series.length < 5) continue;
+    const cur = c.series[c.series.length-1].p;
+    const label = c.label || k;
+    const p30  = pctRangeForWindow(c.series, 30);
+    const p90  = pctRangeForWindow(c.series, 90);
+    const p180 = pctRangeForWindow(c.series, 180);
+    const p365 = pctRangeForWindow(c.series, 365);
+    const p730 = pctRangeForWindow(c.series, 730);
+    const pAll = pctRangeForWindow(c.series, 0);
+    // Count how many windows are extreme
+    const wins = [p30,p90,p180,p365,p730,pAll].filter(v=>v!=null);
+    const buyHits  = wins.filter(v=>v<=10).length;
+    const sellHits = wins.filter(v=>v>=90).length;
+    // Score: how deep in the extreme, weighted by number of windows agreeing
+    const buyScore  = buyHits  === 0 ? -1 : buyHits  * 20 - (p90 != null ? p90 : 50);
+    const sellScore = sellHits === 0 ? -1 : sellHits * 20 + (p90 != null ? p90 : 50);
+    rows.push({ k, label, cur, p30, p90, p180, p365, p730, pAll, buyHits, sellHits, buyScore, sellScore });
+  }
+
+  // Buys: hits >= 2 windows at or below 10% (must include 90D or 180D for weight)
+  const buys  = rows.filter(r => r.buyHits  >= 2 && ((r.p90 != null && r.p90 <= 15) || (r.p180 != null && r.p180 <= 15)))
+                    .sort((a,b) => b.buyScore - a.buyScore)
+                    .slice(0, 6);
+  // Sells: hits >= 2 windows at or above 90%
+  const sells = rows.filter(r => r.sellHits >= 2 && ((r.p90 != null && r.p90 >= 85) || (r.p180 != null && r.p180 >= 85)))
+                    .sort((a,b) => b.sellScore - a.sellScore)
+                    .slice(0, 6);
+
+  const roundQ = v => Math.round(v*4)/4;
+  const fmtMk  = v => '$' + roundQ(v).toFixed(2);
+  const fmtPct = v => v == null ? '\u2014' : Math.round(v) + '%';
+
+  const noteFor = (r, side) => {
+    // Build a compact multi-window note: e.g. "90D 0% \u00b7 1Y 3% \u00b7 All 1%"
+    const parts = [];
+    if (side === 'buy'){
+      if (r.p30  != null && r.p30  <= 10) parts.push('30D ' + Math.round(r.p30) + '%');
+      if (r.p90  != null && r.p90  <= 10) parts.push('90D ' + Math.round(r.p90) + '%');
+      if (r.p180 != null && r.p180 <= 10) parts.push('180D ' + Math.round(r.p180) + '%');
+      if (r.p365 != null && r.p365 <= 10) parts.push('1Y '  + Math.round(r.p365) + '%');
+      if (r.p730 != null && r.p730 <= 10) parts.push('2Y '  + Math.round(r.p730) + '%');
+      if (r.pAll != null && r.pAll <= 10) parts.push('All ' + Math.round(r.pAll) + '%');
+    } else {
+      if (r.p30  != null && r.p30  >= 90) parts.push('30D ' + Math.round(r.p30) + '%');
+      if (r.p90  != null && r.p90  >= 90) parts.push('90D ' + Math.round(r.p90) + '%');
+      if (r.p180 != null && r.p180 >= 90) parts.push('180D ' + Math.round(r.p180) + '%');
+      if (r.p365 != null && r.p365 >= 90) parts.push('1Y '  + Math.round(r.p365) + '%');
+      if (r.p730 != null && r.p730 >= 90) parts.push('2Y '  + Math.round(r.p730) + '%');
+      if (r.pAll != null && r.pAll >= 90) parts.push('All ' + Math.round(r.pAll) + '%');
+    }
+    return parts.join(' \u00b7 ');
+  };
+
+  const rowHtml = (r, side) => `
+    <div class="alert-item">
+      <span class="ai-name">${r.label}</span>
+      <span class="ai-mark">${fmtMk(r.cur)}</span>
+      <span class="ai-pct">${fmtPct(r.p90)}<span style="color:#888;font-weight:500"> 90D</span></span>
+      <span class="ai-note">${noteFor(r, side)}</span>
+    </div>
+  `;
+
+  buyMnt.innerHTML  = buys.length  ? buys.map (r=>rowHtml(r,'buy' )).join('') : '<div class="alert-empty">Nothing at extreme lows right now.</div>';
+  sellMnt.innerHTML = sells.length ? sells.map(r=>rowHtml(r,'sell')).join('') : '<div class="alert-empty">Nothing at extreme highs right now.</div>';
+
+  // Update sub-headers with counts
+  const buySub  = document.getElementById('alertBuySub');
+  const sellSub = document.getElementById('alertSellSub');
+  if (buySub)  buySub.textContent  = buys.length  + ' contract' + (buys.length===1?'':'s')  + ' at \u226410% across 2+ windows';
+  if (sellSub) sellSub.textContent = sells.length + ' contract' + (sells.length===1?'':'s') + ' at \u226590% across 2+ windows';
+}
+
+// ============ SEASONAL PLAYBOOK ============
+function renderSeasonalPlaybook(){
+  const curBody = document.querySelector('#season-current-tbody');
+  const calBody = document.querySelector('#season-cal-tbody');
+  if (!curBody || !calBody) return;
+
+  // Helper: get current mark for a contract key
+  const mark = (k) => {
+    const c = DATA && DATA.contracts && DATA.contracts[k];
+    if (!c || !c.series || !c.series.length) return null;
+    return c.series[c.series.length-1].p;
+  };
+  const fmtMark = (v) => v !== null ? '$' + (Math.round(v*4)/4).toFixed(2) : '\u2014';
+
+  // ===== LIVE MARKS IN RULE BLURBS =====
+  const cal27Mark = fmtMark(mark('CAL27'));
+  const dec26Mark = fmtMark(mark('2026-12'));
+  const $set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  $set('season-cal27-mark', cal27Mark);
+  $set('season-cal27-mark2', cal27Mark);
+  $set('season-dec-mark', dec26Mark);
+
+  // ===== CURRENT YEAR REMAINDER TABLE =====
+  const currentRows = [
+    { k: '2026-09', label: 'Sep-26', base: 'Prompt-month beats contract 60% (5yr).', action: 'Neutral. Position on tape not calendar.', color: '#888' },
+    { k: '2026-10', label: 'Oct-26', base: 'Prompt-month beats only 20% (5yr). Last 3yrs missed.', action: 'Trim length. Fade rallies.', color: '#d43f3f' },
+    { k: '2026-11', label: 'Nov-26', base: '80% beat rate. +$2.71 mean delta.', action: 'Stay long. Add on weakness.', color: '#3fbf5c' },
+    { k: '2026-12', label: 'Dec-26', base: '3 of last 3yrs missed by big margins. Median \u2212$29.65.', action: 'Trim length or take the short.', color: '#d43f3f' },
+    { k: 'CAL27',   label: 'CAL27 (Prompt Cal)', base: 'Sep-Dec net +2.4% mean, but noisy. Real edge is Feb-May cycle.', action: 'No seasonal edge for balance of 2026. Trade % of Range.', color: '#888' },
+  ];
+  curBody.innerHTML = currentRows.map(r => {
+    const m = mark(r.k);
+    const mDisplay = m !== null ? '$' + (Math.round(m*4)/4).toFixed(2) : '&mdash;';
+    return `<tr style="border-bottom:1px solid #1a2530">
+      <td style="padding:8px;font-weight:600;color:#4ba3d1">${r.label}</td>
+      <td style="padding:8px;text-align:right;font-family:monospace">${mDisplay}</td>
+      <td style="padding:8px">${r.base}</td>
+      <td style="padding:8px;color:${r.color};font-weight:600">${r.action}</td>
+    </tr>`;
+  }).join('');
+
+  // ===== PROMPT CAL FULL SEASONAL CALENDAR =====
+  // From Sept 2026 forward, in chronological order, until CAL27 delivery starts (Jan 2027)
+  // Then continue with CAL27 during 2027
+  const monthStats = {
+    1:  { name:'Jan-27', mean: +0.3, med: -0.1, up: 32, rank:'noise',     bias:'No edge' },
+    2:  { name:'Feb-27', mean: -4.9, med: -3.0, up:  0, rank:'STRONG SELL', bias:'Get SHORT. 0/20 up rate.' },
+    3:  { name:'Mar-27', mean: -4.2, med: -2.3, up: 20, rank:'STRONG SELL', bias:'Hold short. Cover Mar 31.' },
+    4:  { name:'Apr-27', mean: -1.0, med: -1.1, up: 35, rank:'weak sell',   bias:'Reload LONG end of month.' },
+    5:  { name:'May-27', mean: +4.3, med: +5.5, up: 90, rank:'STRONG BUY', bias:'Best month in data. Stay long.' },
+    6:  { name:'Jun-27', mean: +4.6, med: +1.4, up: 78, rank:'BUY',        bias:'Take profit end of month.' },
+    7:  { name:'Jul-27', mean: +0.9, med: +0.7, up: 61, rank:'weak',       bias:'Reduce. Summer noise.' },
+    8:  { name:'Aug-27', mean: -0.1, med: +1.2, up: 65, rank:'noise',      bias:'No edge.' },
+    9:  { name:'Sep-26', mean: +1.3, med: +0.4, up: 58, rank:'weak drift', bias:'Trade tape. Slight upward bias.' },
+    10: { name:'Oct-26', mean: +1.2, med: +0.1, up: 53, rank:'noise',      bias:'Median = 0. No edge.' },
+    11: { name:'Nov-26', mean: +0.8, med: +0.3, up: 79, rank:'mild BUY',   bias:'Most reliable fall month.' },
+    12: { name:'Dec-26', mean: +1.6, med: +0.0, up: 42, rank:'noisy',      bias:'sd=6.0. Coin flip.' },
+  };
+
+  // Order: Sep-26, Oct-26, Nov-26, Dec-26, Jan-27, Feb-27, Mar-27, Apr-27, May-27, Jun-27
+  const orderedMonths = [9,10,11,12,1,2,3,4,5,6];
+  const colorFor = (up, mean) => {
+    if (up >= 78 && mean > 0) return '#3fbf5c';
+    if (up <= 22 || (up <= 35 && mean < -2)) return '#d43f3f';
+    if (Math.abs(mean) < 1.5) return '#888';
+    return '#c9a24a';
+  };
+  calBody.innerHTML = orderedMonths.map(m => {
+    const s = monthStats[m];
+    const c = colorFor(s.up, s.mean);
+    const meanStr = (s.mean >= 0 ? '+' : '\u2212') + Math.abs(s.mean).toFixed(1) + '%';
+    const medStr  = (s.med  >= 0 ? '+' : '\u2212') + Math.abs(s.med ).toFixed(1) + '%';
+    return `<tr style="border-bottom:1px solid #2a2010">
+      <td style="padding:8px;font-weight:600;color:#d4af37">${s.name}</td>
+      <td style="padding:8px;text-align:right;font-family:monospace;color:${s.mean>=0?'#3fbf5c':'#d43f3f'}">${meanStr}</td>
+      <td style="padding:8px;text-align:right;font-family:monospace;color:#aaa">${medStr}</td>
+      <td style="padding:8px;text-align:right;font-family:monospace;font-weight:700;color:${c}">${s.up}%</td>
+      <td style="padding:8px;color:${c};font-weight:700;text-transform:uppercase;font-size:11px">${s.rank}</td>
+      <td style="padding:8px;color:#ddd">${s.bias}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============ TAB SWITCHING ============
+function activateTab(name){
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  const btn = document.querySelector('.tab[data-pane="'+name+'"]');
+  if (btn) btn.classList.add('active');
+  $$('.tabpane').forEach(p=>p.classList.remove('active'));
+  const p = document.getElementById('pane-'+name);
+  if (p) p.classList.add('active');
+}
+$$('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{ activateTab(t.dataset.pane); location.hash = t.dataset.pane; });
+});
+if (location.hash && location.hash.length > 1) {
+  const target = location.hash.slice(1);
+  if (document.getElementById('pane-'+target)) activateTab(target);
+}
+
+// ============ CONTROLS ============
+$('#lookback').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  $$('#lookback button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  LOOKBACK = +b.dataset.d;
+  render();
+});
+$('#ma1').addEventListener('change', e=>{ MA_A = +e.target.value||10; render(); });
+$('#ma2').addEventListener('change', e=>{ MA_B = +e.target.value||30; render(); });
+$('#band').addEventListener('change', e=>{ BAND = +e.target.value||15; render(); });
+
+// Percentiles Path controls
+document.addEventListener('change', e=>{
+  if (e.target && (e.target.id === 'pctWindow' || e.target.id === 'pctSpan')) renderPctPath();
+});
+
+$('#openPaste').addEventListener('click', ()=>{
+  $('#paste').classList.add('on');
+  $('#tradeDate').value = new Date().toISOString().slice(0,10);
+});
+$('#closePaste').addEventListener('click', ()=> $('#paste').classList.remove('on'));
+
+function parsePaste(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const rec = {};
+  if (lines.length===2 && lines[0].split('\t').length === lines[1].split('\t').length){
+    const labels = lines[0].split('\t');
+    const prices = lines[1].split('\t');
+    for(let i=0;i<labels.length;i++){
+      const c = normalizeContract(labels[i]);
+      const p = parseFloat(String(prices[i]).replace(/[$,]/g,''));
+      if(c && isFinite(p)) rec[c]=p;
+    }
+  } else {
+    for(const line of lines){
+      const parts = line.split(/\t|,|\s{2,}/).map(x=>x.trim()).filter(Boolean);
+      if(parts.length<2) continue;
+      const c = normalizeContract(parts[0]);
+      const p = parseFloat(parts[1].replace(/[$,]/g,''));
+      if(c && isFinite(p)) rec[c]=p;
+    }
+  }
+  return rec;
+}
+function normalizeContract(raw){
+  raw = raw.trim();
+  if (!raw) return null;
+  const mAbbr = { Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Sept:'09',Oct:'10',Nov:'11',Dec:'12' };
+  let m = raw.match(/^([A-Za-z]{3,4})[- ](\d{2}|\d{4})$/);
+  if (m){
+    const mo = mAbbr[m[1][0].toUpperCase()+m[1].slice(1).toLowerCase()];
+    if (!mo) return null;
+    let y = m[2].length===2 ? '20'+m[2] : m[2];
+    return `${y}-${mo}`;
+  }
+  m = raw.match(/^CAL[- ]?(\d{2}|\d{4})$/i);
+  if (m){ return 'CAL'+(m[1].length===2?m[1]:m[1].slice(-2)); }
+  m = raw.match(/^Q([1-4])[- ]?(\d{2}|\d{4})$/i);
+  if (m){ return `Q${m[1]}-${m[2].length===2?m[2]:m[2].slice(-2)}`; }
+  return null;
+}
+
+function overlayUpdates(){
+  for (const td in LOCAL_UPDATES){
+    for (const c in LOCAL_UPDATES[td]){
+      const arr = DATA.contracts[c]?.series;
+      if(!arr) continue;
+      const filtered = arr.filter(x=>x.d!==td);
+      filtered.push({d:td, p: LOCAL_UPDATES[td][c]});
+      filtered.sort((a,b)=> a.d<b.d?-1:1);
+      DATA.contracts[c].series = filtered;
+      DATA.contracts[c].current = filtered[filtered.length-1].p;
+    }
+  }
+  const dates = Object.keys(LOCAL_UPDATES).sort();
+  if (dates.length){
+    DATA.latest_trade_date = dates[dates.length-1];
+    $('#meta').textContent = 'Latest settle: '+DATA.latest_trade_date+'   ·   '+
+      Object.keys(DATA.contracts).length+' contracts   ·   session updates: '+dates.length;
+  }
+}
+
+$('#applyPaste').addEventListener('click', ()=>{
+  const td = $('#tradeDate').value;
+  const parsed = parsePaste($('#pasteBox').value);
+  const keys = Object.keys(parsed);
+  if (!td || !keys.length){ $('#pasteMsg').textContent = 'Nothing parsed. Check contract labels.'; return; }
+  LOCAL_UPDATES[td] = Object.assign(LOCAL_UPDATES[td]||{}, parsed);
+  overlayUpdates();
+  render();
+  $('#pasteMsg').innerHTML = `Applied ${keys.length} contract(s) for ${td}.`;
+});
+
+$('#dropBtn').addEventListener('click', ()=> $('#fileInput').click());
+$('#fileInput').addEventListener('change', async (e)=>{
+  const files = Array.from(e.target.files||[]);
+  if(!files.length) return;
+  let totalDates = 0, totalContracts = 0, warnings = [];
+  for (const f of files){
+    try{
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array', cellDates:true});
+      const res = ingestDailyWorkbook(wb, f.name);
+      totalDates += res.dates; totalContracts += res.contracts;
+      if(res.warning) warnings.push(f.name+': '+res.warning);
+    }catch(err){ warnings.push(f.name+': '+err.message); }
+  }
+  overlayUpdates();
+  render();
+  showToast(`Loaded ${files.length} file(s) → ${totalContracts} monthly settles across ${totalDates} trade date(s).`+(warnings.length?'<br/><span style="color:#ef4444">'+warnings.join('<br/>')+'</span>':''));
+  e.target.value='';
+});
+function showToast(html){
+  let t = document.getElementById('toast');
+  if(!t){
+    t = document.createElement('div'); t.id='toast';
+    t.style.cssText='position:fixed;bottom:20px;right:20px;max-width:520px;background:#0e1a2a;border:1px solid #274b76;color:#e6edf5;padding:12px 14px;border-radius:10px;font-size:12px;box-shadow:0 8px 20px rgba(0,0,0,.4);z-index:30';
+    document.body.appendChild(t);
+  }
+  t.innerHTML = html + '<div style="margin-top:6px;color:#9aa8bb;font-size:11px">click to dismiss</div>';
+  t.onclick = ()=> t.remove();
+  setTimeout(()=>{ if(t.parentNode) t.remove(); }, 8000);
+}
+function ingestDailyWorkbook(wb, filename){
+  const sn = wb.SheetNames.find(n => n.toLowerCase()==='monthly') || wb.SheetNames[0];
+  const sheet = wb.Sheets[sn];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:null});
+  if(!rows.length) return {dates:0, contracts:0, warning:'empty sheet'};
+  const header = rows[0].map(x=> (x==null?'':String(x)).trim());
+  const mdIdx = header.findIndex(h => /market\s*date/i.test(h));
+  const beginIdx = header.findIndex(h => /begin\s*date/i.test(h));
+  const abFlatIdx = header.findIndex(h => /AB\s*Flat\s*Electricity\s*Swap/i.test(h));
+  if (mdIdx<0 || beginIdx<0 || abFlatIdx<0){
+    return {dates:0, contracts:0, warning:'could not find columns'};
+  }
+  const dates = new Set();
+  let contracts = 0;
+  for (let i=1;i<rows.length;i++){
+    const r = rows[i]; if(!r) continue;
+    const md = toDateStr(r[mdIdx]);
+    const bd = toDateStr(r[beginIdx]);
+    const px = parseFloat(String(r[abFlatIdx]).replace(/[$,]/g,''));
+    if(!md || !bd || !isFinite(px)) continue;
+    const ym = bd.slice(0,7);
+    if(!DATA.contracts[ym]) continue;
+    LOCAL_UPDATES[md] = LOCAL_UPDATES[md] || {};
+    LOCAL_UPDATES[md][ym] = px;
+    dates.add(md); contracts++;
+  }
+  for (const td of dates) recomputeStripsForDate(td);
+  return {dates: dates.size, contracts};
+}
+function toDateStr(v){
+  if(v==null) return null;
+  if (v instanceof Date) return v.toISOString().slice(0,10);
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const d = new Date(s);
+  if (!isNaN(+d)) return d.toISOString().slice(0,10);
+  return null;
+}
+function hoursInMonth(y,m){ return 24*new Date(y, m, 0).getDate(); }
+function recomputeStripsForDate(td){
+  const settles = {};
+  for (const c of Object.keys(DATA.contracts)){
+    if (c.length===7 && c[4]==='-'){
+      const hist = DATA.contracts[c].series.find(x=>x.d===td);
+      if (hist) settles[c] = hist.p;
+    }
+  }
+  if (LOCAL_UPDATES[td]){
+    for (const k in LOCAL_UPDATES[td]){
+      if (k.length===7 && k[4]==='-') settles[k] = LOCAL_UPDATES[td][k];
+    }
+  }
+  function stripPx(months){
+    let tot=0, tH=0;
+    for (const ym of months){
+      if (!(ym in settles)) return null;
+      const y=+ym.slice(0,4), m=+ym.slice(5,7);
+      const h = hoursInMonth(y,m);
+      tot += settles[ym]*h; tH += h;
+    }
+    return tH ? tot/tH : null;
+  }
+  const strips = {
+    'CAL27': stripPx(Array.from({length:12},(_,i)=>`2027-${String(i+1).padStart(2,'0')}`)),
+    'CAL28': stripPx(Array.from({length:12},(_,i)=>`2028-${String(i+1).padStart(2,'0')}`)),
+    'CAL29': stripPx(Array.from({length:12},(_,i)=>`2029-${String(i+1).padStart(2,'0')}`)),
+    'CAL30': stripPx(Array.from({length:12},(_,i)=>`2030-${String(i+1).padStart(2,'0')}`)),
+  };
+  for (const yy of ['27','28']){
+    for (const q of [1,2,3,4]){
+      const s = (q-1)*3+1;
+      strips[`Q${q}-${yy}`] = stripPx([s, s+1, s+2].map(mm=>`20${yy}-${String(mm).padStart(2,'0')}`));
+    }
+  }
+  LOCAL_UPDATES[td] = LOCAL_UPDATES[td] || {};
+  for (const k in strips){ if (strips[k]!=null) LOCAL_UPDATES[td][k] = +strips[k].toFixed(4); }
+}
+
+loadAll();
+</script>
+</div><!-- /#app -->
+<script data-pplx-inline-edit>
+(function () {
+  if (window === window.top) return;
+
+  const allowedParentOrigins = ["https://www.perplexity.ai","https://perplexity.ai","https://testing.perplexity.ai","https://staging.perplexity.ai","https://*.preview.i.perplexity.ai","http://perplexity.localhost","http://localhost:1420","http://127.0.0.1:1420","http://localhost:3000","http://127.0.0.1:3000","http://localhost:5173","http://127.0.0.1:5173"];
+  const MAX_FONT_BYTES = 500 * 1024;
+  const MAX_TOTAL_FONT_BYTES = 2 * 1024 * 1024;
+  let scrollForwarding = false;
+  let scrollRaf = 0;
+  let trustedTopOrigin = null;
+
+  // Allow entries like "https://*.preview.i.perplexity.ai" — the wildcard
+  // matches a single DNS label (no dots), so "https://*.foo" cannot stretch
+  // across multiple labels.
+  function matchesAllowedOrigin(origin) {
+    if (!origin) return false;
+    for (const entry of allowedParentOrigins) {
+      if (!entry.includes("*")) {
+        if (entry === origin) return true;
+        continue;
+      }
+      const pattern = new RegExp(
+        "^" +
+          entry.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+") +
+          "$",
+      );
+      if (pattern.test(origin)) return true;
+    }
+    return false;
+  }
+
+  // Trust decision: when the sender is same-origin-visible (event.origin is a
+  // real origin like https://www.perplexity.ai) we trust event.origin directly.
+  // When event.origin is "null" (opaque broker srcdoc), we fall back to the
+  // broker's stamped `parentOrigin` to identify the top window. The fallback
+  // is claim-only — we rely on the browser's native `targetOrigin` enforcement
+  // on the response path (see postToTrustedTop) to ensure replies can't be
+  // delivered to anyone but the actual top window of that claimed origin.
+  function getTrustedParentOrigin(event) {
+    const forwardedParentOrigin =
+      typeof event.data.parentOrigin === "string" ? event.data.parentOrigin : null;
+    const parentOrigin = event.origin === "null" ? forwardedParentOrigin : event.origin;
+    return matchesAllowedOrigin(parentOrigin) ? parentOrigin : null;
+  }
+
+  // All responses go to window.top with targetOrigin = the allowlisted origin.
+  // An attacker that iframes us inside their own null-origin broker can claim
+  // any parentOrigin they like, but the browser will drop the reply whenever
+  // the real top's origin doesn't match — so the screenshot never leaves.
+  function postToTrustedTop(message) {
+    if (!trustedTopOrigin) return;
+    try {
+      window.top.postMessage(message, trustedTopOrigin);
+    } catch (_error) {}
+  }
+
+  function inlineAll(original, clone) {
+    if (original.nodeType !== 1 || clone.nodeType !== 1) return;
+
+    try {
+      const computedStyle = getComputedStyle(original);
+      // cssText on a computed style is the serialized declaration in modern
+      // Chromium/Safari — a single read beats enumerating ~400 longhand
+      // properties. Firefox returns "" here, so we fall back on empty.
+      const serialized = computedStyle.cssText;
+      if (serialized) {
+        clone.style.cssText = serialized;
+      } else {
+        const parts = new Array(computedStyle.length);
+        for (let index = 0; index < computedStyle.length; index += 1) {
+          const property = computedStyle[index];
+          parts[index] = `${property}:${computedStyle.getPropertyValue(property)};`;
+        }
+        clone.style.cssText = parts.join("");
+      }
+    } catch (_error) {}
+
+    const originalChildren = original.children;
+    const clonedChildren = clone.children;
+    for (
+      let index = 0;
+      index < originalChildren.length && index < clonedChildren.length;
+      index += 1
+    ) {
+      inlineAll(originalChildren[index], clonedChildren[index]);
+    }
+  }
+
+  function extractFontUrl(srcValue) {
+    const matches = [
+      ...srcValue.matchAll(
+        /url\(["']?([^"')]+)["']?\)(?:\s*format\(["']?([^"')]+)["']?\))?/gi,
+      ),
+    ];
+    if (matches.length === 0) return null;
+    const woff2 = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff2"));
+    if (woff2) return woff2[1];
+    const woff = matches.find((m) => m[2] && m[2].toLowerCase().includes("woff"));
+    if (woff) return woff[1];
+    return matches[0][1];
+  }
+
+  // Cache resolved font URL -> data URI across captures. Fonts on a page
+  // essentially never change, and a batch run emits multiple captures back to
+  // back — without this we'd refetch + re-base64 every time.
+  const fontDataUriCache = new Map();
+  const SRC_DECLARATION_RE = /src\s*:\s*[^;}]+/i;
+
+  async function fetchAsDataUri(url) {
+    if (fontDataUriCache.has(url)) return fontDataUriCache.get(url);
+    let dataUri = null;
+    try {
+      const response = await fetch(url, { mode: "cors", credentials: "omit" });
+      if (response.ok) {
+        const blob = await response.blob();
+        if (blob.size <= MAX_FONT_BYTES) {
+          dataUri = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    } catch (_error) {
+      dataUri = null;
+    }
+    fontDataUriCache.set(url, dataUri);
+    return dataUri;
+  }
+
+  function collectFontFaceRuleTexts() {
+    const rules = [];
+    for (const sheet of document.styleSheets) {
+      let cssRules;
+      try {
+        cssRules = sheet.cssRules;
+      } catch (_error) {
+        continue;
+      }
+      if (!cssRules) continue;
+      for (const rule of cssRules) {
+        const cssText = rule.cssText || "";
+        if (cssText.startsWith("@font-face")) rules.push(cssText);
+      }
+    }
+    return rules;
+  }
+
+  async function buildInlinedFontCss() {
+    const ruleTexts = collectFontFaceRuleTexts();
+    if (ruleTexts.length === 0) return null;
+
+    const resolved = ruleTexts.map((cssText) => {
+      if (!SRC_DECLARATION_RE.test(cssText)) return null;
+      const srcMatch = cssText.match(/src\s*:\s*([^;}]+)[;}]/i);
+      if (!srcMatch) return null;
+      const url = extractFontUrl(srcMatch[1]);
+      if (!url) return null;
+      try {
+        return { cssText, url: new URL(url, document.baseURI).href };
+      } catch (_error) {
+        return null;
+      }
+    });
+
+    const dataUris = await Promise.all(
+      resolved.map((entry) => (entry ? fetchAsDataUri(entry.url) : Promise.resolve(null))),
+    );
+
+    const inlined = [];
+    let totalBytes = 0;
+    for (let index = 0; index < resolved.length; index += 1) {
+      const entry = resolved[index];
+      const dataUri = dataUris[index];
+      if (!entry || !dataUri) continue;
+      const approxBytes = dataUri.length * 0.75;
+      if (totalBytes + approxBytes > MAX_TOTAL_FONT_BYTES) break;
+      totalBytes += approxBytes;
+      inlined.push(entry.cssText.replace(SRC_DECLARATION_RE, `src: url("${dataUri}")`));
+    }
+    return inlined.length > 0 ? inlined.join("\n") : null;
+  }
+
+  function stripExternal(clone) {
+    const images = clone.querySelectorAll("img");
+    for (let index = 0; index < images.length; index += 1) {
+      const src = images[index].getAttribute("src");
+      if (src && !src.startsWith("data:")) images[index].removeAttribute("src");
+    }
+
+    const elements = clone.querySelectorAll("*");
+    for (let index = 0; index < elements.length; index += 1) {
+      const style = elements[index].style.cssText;
+      if (style && style.includes("url(")) {
+        elements[index].style.cssText = style.replace(
+          /url\(["']?(?!data:)[^)"']*["']?\)/gi,
+          "none",
+        );
+      }
+    }
+  }
+
+  function emitScroll() {
+    scrollRaf = 0;
+    if (!scrollForwarding) return;
+    postToTrustedTop({
+      type: "INLINE_EDIT_SCROLL",
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
+  }
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (!scrollForwarding || scrollRaf) return;
+      scrollRaf = requestAnimationFrame(emitScroll);
+    },
+    { passive: true, capture: true },
+  );
+
+  async function handleCaptureRequest(event) {
+    const requestId = event.data.requestId;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    function postResult(dataUrl) {
+      postToTrustedTop({
+        type: "INLINE_EDIT_SCREENSHOT_RESULT",
+        requestId,
+        dataUrl,
+        scrollX,
+        scrollY,
+      });
+    }
+
+    try {
+      // Wait for any pending web fonts to resolve so both inline metrics and
+      // the @font-face inlining below see the same loaded faces.
+      if (document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch (_error) {}
+      }
+
+      const clone = document.documentElement.cloneNode(true);
+      inlineAll(document.documentElement, clone);
+
+      const removedNodes = clone.querySelectorAll("script,link[rel=\"stylesheet\"],style");
+      for (let index = 0; index < removedNodes.length; index += 1) {
+        removedNodes[index].remove();
+      }
+
+      stripExternal(clone);
+
+      // Re-embed web fonts as data-URI @font-face rules so the SVG rasterizer
+      // can resolve them — external font URLs aren't fetched during
+      // foreignObject rendering, which would otherwise force a fallback face
+      // and change text metrics.
+      const inlinedFontCss = await buildInlinedFontCss();
+      if (inlinedFontCss) {
+        const styleEl = document.createElement("style");
+        styleEl.textContent = inlinedFontCss;
+        const head = clone.querySelector("head");
+        if (head) head.appendChild(styleEl);
+        else clone.insertBefore(styleEl, clone.firstChild);
+      }
+
+      const html = new XMLSerializer().serializeToString(clone);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        '<foreignObject width="100%" height="100%">' +
+        `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${width}px;height:${height}px;overflow:hidden">` +
+        `<div style="position:relative;left:-${scrollX}px;top:-${scrollY}px">` +
+        html +
+        "</div></div></foreignObject></svg>";
+      const svgUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const image = new Image();
+      image.onload = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        postResult(canvas.toDataURL("image/png"));
+      };
+      image.onerror = function () {
+        postResult(null);
+      };
+      image.src = svgUrl;
+    } catch (_error) {
+      postResult(null);
+    }
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    // Only accept messages from the direct parent frame. Blocks sibling /
+    // unrelated-window postMessage senders that could otherwise reach us.
+    if (event.source !== window.parent) return;
+
+    const trustedParentOrigin = getTrustedParentOrigin(event);
+    if (!trustedParentOrigin) return;
+    trustedTopOrigin = trustedParentOrigin;
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_START") {
+      scrollForwarding = true;
+      emitScroll();
+      return;
+    }
+
+    if (event.data.type === "INLINE_EDIT_SCROLL_STOP") {
+      scrollForwarding = false;
+      if (scrollRaf) cancelAnimationFrame(scrollRaf);
+      scrollRaf = 0;
+      return;
+    }
+
+    if (event.data.type !== "INLINE_EDIT_CAPTURE_REQUEST") return;
+
+    handleCaptureRequest(event);
+  });
+})();
+
+
+</script></body>
+</html>
