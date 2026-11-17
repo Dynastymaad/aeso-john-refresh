@@ -968,6 +968,7 @@ let LOOKBACK = 90;
 let MA_A = 10, MA_B = 30;
 let BAND = 15;
 let LOCAL_UPDATES = {};
+let LOCAL_SETTLES = {};   // day -> AB Flat daily settle from an uploaded PowerMarks XLSX (Daily sheet)
 
 const $ = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -993,6 +994,42 @@ function sma(series, n){
 function fmt(v){ return v==null?'—':('$'+v.toFixed(2)); }
 function q25(v){ return v==null?null : Math.round(v*4)/4; }
 function fmtQ(v){ return v==null?'—':('$'+q25(v).toFixed(2)); }
+// 7-day rolling average of settled AB Flat daily prices, aligned to the given dates.
+// Sources (later wins): Warehouse price marks (data.json daily_settles, AB Flat daily swap XDT),
+// uploaded PowerMarks XLSX (Daily sheet), then AESO actual daily pool price (daily.json).
+function settleMap(){
+  const m = new Map();
+  for (const r of (DATA && DATA.daily_settles) || []) if (r && r.p!=null) m.set(r.d, +r.p);
+  for (const d in LOCAL_SETTLES) m.set(d, LOCAL_SETTLES[d]);
+  for (const r of (DAILY && DAILY.series) || []) if (r && r.p!=null) m.set(r.d, +r.p);
+  return m;
+}
+function settle7dFor(dates){
+  const m = settleMap();
+  return dates.map(d=>{
+    const t = Date.parse(d+'T00:00:00Z');
+    if (isNaN(t)) return null;
+    let sum=0, n=0;
+    for (let i=0;i<7;i++){
+      const k = new Date(t - i*86400000).toISOString().slice(0,10);
+      if (m.has(k)){ sum += m.get(k); n++; }
+    }
+    return n>=4 ? sum/n : null;
+  });
+}
+// Right-axis range with exactly 5 round-number prices (like the left axis).
+function niceAxis5(vals){
+  const v = vals.filter(x=>x!=null && isFinite(x));
+  if (!v.length) return {};
+  let lo = Math.min(...v), hi = Math.max(...v);
+  if (hi === lo){ lo -= 1; hi += 1; }
+  const mag = Math.pow(10, Math.floor(Math.log10((hi-lo)/4)));
+  for (const m of [1, 2, 2.5, 5, 10, 20, 25, 50, 100]){
+    const step = m*mag, min = Math.floor(lo/step)*step;
+    if (min + 4*step >= hi) return {min, max: min + 4*step, step};
+  }
+  return {};
+}
 function sliceLookback(series){
   if(!LOOKBACK) return series;
   return series.slice(-LOOKBACK);
@@ -2312,6 +2349,8 @@ function renderChart(contract, mount){
   const canvas = mount.querySelector('canvas');
   if (charts[contract]) charts[contract].destroy();
   const labels = s.series.map(x=>x.d);
+  const settle7 = settle7dFor(labels);
+  const ax2 = niceAxis5(settle7);
   charts[contract] = new Chart(canvas, {
     type:'line',
     data:{
@@ -2323,6 +2362,8 @@ function renderChart(contract, mount){
          borderWidth:1.3, pointRadius:0, fill:false},
         {label:'MA'+MA_B, data:s.ma_b, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--ma2').trim(),
          borderWidth:1.3, pointRadius:0, fill:false},
+        {label:'Settle 7d avg (right axis)', data:settle7, borderColor:'#ef4444', yAxisID:'y2',
+         borderWidth:1.5, pointRadius:0, tension:0.15, fill:false, spanGaps:false},
       ]
     },
     options:{
@@ -2347,7 +2388,8 @@ function renderChart(contract, mount){
       layout:{padding:{top:2,right:2,left:0,bottom:0}},
       scales:{
         x:{ticks:{color:'#8ea3bd', maxTicksLimit:6, font:{size:9}, autoSkip:true, maxRotation:0}, grid:{display:false}},
-        y:{ticks:{color:'#8ea3bd', font:{size:9}, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{color:'rgba(255,255,255,.04)'}}
+        y:{ticks:{color:'#8ea3bd', font:{size:9}, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{color:'rgba(255,255,255,.04)'}},
+        y2:{position:'right', min:ax2.min, max:ax2.max, ticks:{color:'#ef4444', font:{size:9}, stepSize:ax2.step, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{display:false}}
       }
     }
   });
@@ -3086,7 +3128,29 @@ function ingestDailyWorkbook(wb, filename){
     dates.add(md); contracts++;
   }
   for (const td of dates) recomputeStripsForDate(td);
+  ingestDailySettles(wb);
   return {dates: dates.size, contracts};
+}
+// Daily sheet: AB Flat daily swap rows whose delivery day is before the market date = settled days.
+function ingestDailySettles(wb){
+  const sn = wb.SheetNames.find(n => n.toLowerCase()==='daily');
+  if (!sn) return 0;
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, raw:false, defval:null});
+  if (!rows.length) return 0;
+  const header = rows[0].map(x=> (x==null?'':String(x)).trim());
+  const mdIdx = header.findIndex(h => /market\s*date/i.test(h));
+  const beginIdx = header.findIndex(h => /begin\s*date/i.test(h));
+  const abFlatIdx = header.findIndex(h => /AB\s*Flat\s*Electricity\s*Swap/i.test(h));
+  if (mdIdx<0 || beginIdx<0 || abFlatIdx<0) return 0;
+  let n = 0;
+  for (let i=1;i<rows.length;i++){
+    const r = rows[i]; if(!r) continue;
+    const md = toDateStr(r[mdIdx]), bd = toDateStr(r[beginIdx]);
+    const px = parseFloat(String(r[abFlatIdx]).replace(/[$,]/g,''));
+    if (!md || !bd || !isFinite(px) || bd >= md) continue;
+    LOCAL_SETTLES[bd] = px; n++;
+  }
+  return n;
 }
 function toDateStr(v){
   if(v==null) return null;
