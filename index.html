@@ -131,6 +131,11 @@
   .pctbox.pct-buy{background:rgba(15,58,43,.85);border:1.5px solid #31c48d;color:#c8f7dc}
   .pctbox.pct-sell{background:rgba(58,20,20,.85);border:1.5px solid #ef4444;color:#ffd0d0}
   .pctbox.pct-mid{background:rgba(26,34,46,.85);border:1.5px solid #4a5a72;color:#e6edf5}
+  /* Contract charts: "Now at" box sits in the card header, off the chart */
+  .card .hd-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+  .pctbox.pctbox-inline{position:static;display:flex;align-items:center;gap:12px;padding:3px 10px;min-width:0;box-shadow:none;backdrop-filter:none}
+  .pctbox.pctbox-inline .big{font-size:14px;margin:0}
+  .pctbox.pctbox-inline .row{margin:0;gap:5px}
 
   /* paste modal */
   #paste{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;align-items:center;justify-content:center}
@@ -2337,17 +2342,19 @@ function renderChart(contract, mount){
   mount.innerHTML = `
     <div class="hd">
       <div class="ttl">${c.label}<span class="badge ${badgeCls}">${badgeTxt}</span></div>
-      <div class="px">${fmtQ(s.cur)}</div>
+      <div class="hd-right">
+        <div class="pctbox pctbox-inline ${pctBoxCls}">
+          <div class="lbl">Now at</div>
+          <div class="big">${pctTxt}</div>
+          <div class="row"><span>BUY ≤</span><span>${fmtQ(s.pLo)}</span></div>
+          <div class="row"><span>SELL ≥</span><span>${fmtQ(s.pHi)}</span></div>
+        </div>
+        <div class="px">${fmtQ(s.cur)}</div>
+      </div>
     </div>
     <div class="sub">Range ${fmtQ(s.min)} → ${fmtQ(s.max)} · Median ${fmtQ(s.med)}</div>
     <div class="cv">
       <canvas></canvas>
-      <div class="pctbox ${pctBoxCls}">
-        <div class="lbl">Now at</div>
-        <div class="big">${pctTxt}</div>
-        <div class="row"><span>BUY ≤</span><span>${fmtQ(s.pLo)}</span></div>
-        <div class="row"><span>SELL ≥</span><span>${fmtQ(s.pHi)}</span></div>
-      </div>
     </div>
   `;
   const canvas = mount.querySelector('canvas');
