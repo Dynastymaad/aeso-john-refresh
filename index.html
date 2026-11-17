@@ -2170,7 +2170,11 @@ function activeContracts(){
     }
     chartQs = chartQs.filter(k=>DATA.contracts[k]);
   }
-  const chartCals = ['CAL27','CAL28','CAL29'].filter(k=>DATA.contracts[k]);
+  // Always chart every Q1 contract in the data, alongside the next 3 quarters.
+  const q1s = Object.keys(DATA.contracts).filter(k=>/^Q1-\d\d$/.test(k));
+  const qOrder = k => +k.slice(3)*10 + +k[1];
+  chartQs = [...new Set([...chartQs, ...q1s])].sort((a,b)=>qOrder(a)-qOrder(b));
+  const chartCals = ['CAL27','CAL28','CAL29','CAL30'].filter(k=>DATA.contracts[k]);
   const chartKeys = [...chartMonths, ...chartQs, ...chartCals];
 
   return {months, qs, cals, chartKeys};
@@ -2362,7 +2366,7 @@ function renderChart(contract, mount){
          borderWidth:1.3, pointRadius:0, fill:false},
         {label:'MA'+MA_B, data:s.ma_b, borderColor:getComputedStyle(document.documentElement).getPropertyValue('--ma2').trim(),
          borderWidth:1.3, pointRadius:0, fill:false},
-        {label:'Settle 7d avg (right axis)', data:settle7, borderColor:'#ef4444', yAxisID:'y2',
+        {label:'Settle 7d avg (right axis)', data:settle7, borderColor:'#f5ecc8', yAxisID:'y2', borderDash:[6,4],
          borderWidth:1.5, pointRadius:0, tension:0.15, fill:false, spanGaps:false},
       ]
     },
@@ -2387,9 +2391,9 @@ function renderChart(contract, mount){
       },
       layout:{padding:{top:2,right:2,left:0,bottom:0}},
       scales:{
-        x:{ticks:{color:'#8ea3bd', maxTicksLimit:6, font:{size:9}, autoSkip:true, maxRotation:0}, grid:{display:false}},
-        y:{ticks:{color:'#8ea3bd', font:{size:9}, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{color:'rgba(255,255,255,.04)'}},
-        y2:{position:'right', min:ax2.min, max:ax2.max, ticks:{color:'#ef4444', font:{size:9}, stepSize:ax2.step, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{display:false}}
+        x:{ticks:{color:'#8ea3bd', maxTicksLimit:12, font:{size:9}, autoSkip:true, maxRotation:0}, grid:{display:true, color:'rgba(255,255,255,.07)'}},
+        y:{ticks:{color:'#8ea3bd', font:{size:9}, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{color:'rgba(255,255,255,.09)'}},
+        y2:{position:'right', min:ax2.min, max:ax2.max, ticks:{color:'#f5ecc8', font:{size:9}, stepSize:ax2.step, maxTicksLimit:5, callback:v=>'$'+v.toFixed(0)}, grid:{display:false}}
       }
     }
   });
